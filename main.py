@@ -556,20 +556,20 @@ def run_manual_post(url):
         with open(desc_path, "w", encoding="utf-8") as f:
             f.write(description_text)
 
-        # 7. POST TO PLATFORMS        
-        # YouTube (API Method - Returns YouTube Link String)
-        tags = "amazon, deals, india, gadget"
-        youtube_url = uploader.upload_to_youtube(None, video_path, safe_name, description_text, backend_yt_tags)
+        # # 7. POST TO PLATFORMS        
+        # # YouTube (API Method - Returns YouTube Link String)
+        # tags = "amazon, deals, india, gadget"
+        # youtube_url = uploader.upload_to_youtube(None, video_path, safe_name, description_text, backend_yt_tags)
 
-        # Pass that exact youtube_url string into your updated uploader module!
-        insta_uploader.upload_to_instagram(video_path, description_text)
+        # # Pass that exact youtube_url string into your updated uploader module!
+        # insta_uploader.upload_to_instagram(video_path, description_text)
 
-        # Telegram (Funnel the captured YouTube URL string directly into our layout parameter)
-        telegram_poster.post_to_telegram(safe_name, product_url, video_path, youtube_url = youtube_url)
+        # # Telegram (Funnel the captured YouTube URL string directly into our layout parameter)
+        # telegram_poster.post_to_telegram(safe_name, product_url, video_path, youtube_url = youtube_url)
 
-        # 8. RECORD HISTORY
-        record_upload(product['asin'], safe_name)
-        print(f"✅ Manual Post Complete: {product['asin']}")
+        # # 8. RECORD HISTORY
+        # record_upload(product['asin'], safe_name)
+        # print(f"✅ Manual Post Complete: {product['asin']}")
 
         # --- 🌐 NEW LANDING PAGE INTEGRATION LOOP STEP ---
         # Fallback cascade to find whatever valid image string your scraper collected
@@ -598,5 +598,5 @@ if __name__ == "__main__":
     cleanup_temp_files()
     # start_daily_routine()    
     
-    # manual_url = "https://www.amazon.in/dp/B0FDBB2VRC"
-    # run_manual_post(manual_url)
+    manual_url = "https://www.amazon.in/dp/B0FDBB2VRC"
+    run_manual_post(manual_url)

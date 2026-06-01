@@ -1,0 +1,11 @@
+# Ignore local environment variable parameters
+Config.env
+
+# Ignore YouTube API structural credentials and tokens
+client_secrets.json
+token.pickle
+
+# Ignore runtime output folders and temporary video components
+Exports/
+temp_*.jpg
+manual_temp_*.jpg
