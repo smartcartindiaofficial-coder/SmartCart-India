@@ -8,6 +8,14 @@
         :root { --bg: #0d0d11; --card-bg: #16161f; --text: #f3f4f6; --accent: #ff9900; --border: #262636; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        /* ─── SOCIAL LINKS GRID STYLES ─── */
+        .social-links-container {display: flex; justify-content: center; gap: 10px; margin-top: 15px; width: 100%;}
+        .social-link {flex: 1; max-width: 120px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; text-decoration: none; color: #ffffff; transition: transform 0.2s ease, filter 0.2s ease; border: 1px solid rgba(255, 255, 255, 0.1);}
+        .social-link:hover {transform: translateY(-2px); filter: brightness(1.2);}
+        /* Platform Brand Specific Backgrounds */
+        .yt-link { background: #ff0000; }
+        .tg-link { background: #0088cc; }
+        .ig-link { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); }
         .header-panel { text-align: center; margin: 25px 0; max-width: 480px; width: 100%; }
         .header-panel h1 { font-size: 1.6rem; color: var(--text); margin-bottom: 5px; }
         .header-panel p { font-size: 0.9rem; color: #8b8ba7; }
@@ -25,8 +33,20 @@
 </head>
 <body>
     <div class="header-panel">
-        <h1>🛒 SmartCart India Deals</h1>
-        <p>Click any product below to grab the live discount link direct from Amazon!</p>
+        <h1>🔥 Best Daily Deals - SmartCart India 🔥</h1>
+        <p>Handpicked Premium Tech & Lifestyle Finds Up to 70% Off</p>
+        
+        <div class="social-links-container">
+            <a href="https://www.youtube.com/@SmartCartIndiaOfficial" target="_blank" class="social-link yt-link">
+                <span>🎬 YouTube</span>
+            </a>
+            <a href="https://t.me/smartCartIndiaOfficial" target="_blank" class="social-link tg-link">
+                <span>✈️ Telegram</span>
+            </a>
+            <a href="https://www.instagram.com/smartcartindiaofficial" target="_blank" class="social-link ig-link">
+                <span>📸 Instagram</span>
+            </a>
+        </div>
     </div>
     <div class="deals-container" id="deals-wrapper">
 
