@@ -22,8 +22,11 @@ INSTAGRAM_ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID")
 PORT = int(os.getenv("LOCAL_SERVER_PORT", 8000))
 
 NGROK_BINARY_PATH = os.path.join(os.getcwd(), "ngrok.exe")
-conf.get_default().request_timeout = 90
-conf.get_default().ngrok_path = NGROK_BINARY_PATH
+if conf is not None:
+    conf.get_default().request_timeout = 90
+    conf.get_default().ngrok_path = NGROK_BINARY_PATH
+else:
+    print("🌐 Cloud Runtime: Skipping ngrok binary and timeout configuration rules.")
 
 def clean_amazon_url(url):
     """
