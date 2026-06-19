@@ -488,7 +488,7 @@ def start_daily_routine():
                 print(f"📦 Thumbnail moved cleanly to asset archive: {thumb_dest_path}")   
             
             # Form clean full protocol tracking link
-            product_url = f"https://www.amazon.in/dp/{asin}?tag={os.getenv("Affiliate_Code")}"
+            product_url = f"https://www.amazon.in/dp/{asin}?tag={os.getenv('Affiliate_Code')}"
 
             # --- 📈 DYNAMIC ALGORITHMIC TAG COMPILER ---
             # 1. Identify which category scout.py extracted (Fallback to Default if missing)
@@ -665,7 +665,7 @@ def run_manual_post(url):
             print(f"📦 Thumbnail moved cleanly to asset archive: {thumb_dest_path}")
 
         # Build correct absolute affiliate link
-        product_url = f"https://www.amazon.in/dp/{product['asin']}?tag={os.getenv("Affiliate_Code")}"
+        product_url = f"https://www.amazon.in/dp/{product['asin']}?tag={os.getenv('Affiliate_Code')}"
 
         # --- 📈 DYNAMIC ALGORITHMIC TAG COMPILER ---
         # 1. Identify which category scout.py extracted (Fallback to Default if missing)
