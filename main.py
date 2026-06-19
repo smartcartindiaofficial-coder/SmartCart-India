@@ -379,13 +379,23 @@ def start_daily_routine():
     os.system("taskkill /f /im brave.exe >nul 2>&1")
     time.sleep(2)
 
-    options = Options()
-    options.add_argument("--headless=new") # Required for Cloud virtual machines
-    options.add_argument("--no-sandbox")   # Required for Linux server permissions
-    options.add_argument("--disable-dev-shm-usage") # Overcomes limited resource problems
-    options.add_argument("--disable-gpu")
-
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    options = webdriver.ChromeOptions()
+    # Check if running in GitHub Actions cloud or locally
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        print("🌐 Cloud Environment Detected: Configuring Headless Chromium...")
+        options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        # GitHub Action runners have Chromium pre-mapped to default paths
+        driver = webdriver.Chrome(options=options)
+    else:
+        print("💻 Local Environment Detected: Launching Local Brave Instance...")
+        if BRAVE_PATH:
+            options.binary_location = BRAVE_PATH
+        if BRAVE_USER_DATA:
+            options.add_argument(f"--user-data-dir={BRAVE_USER_DATA}")
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     
     try:
         pool_size = int(os.getenv("pool_size"))
