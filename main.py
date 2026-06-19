@@ -530,8 +530,20 @@ def start_daily_routine():
             youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
             print(f"✅ Product {asin} Published to YouTube via API.")
 
+            # 🔗 Dynamically construct the public GitHub Pages URL
+            github_username = os.getenv("GITHUB_USERNAME", "default_fallback")
+            repo_name = "smartcart-deals"
+            
+            video_filename = os.path.basename(video_path) 
+            public_github_video_url = f"https://{github_username}.github.io/{repo_name}/Exports/{video_filename}"
+
             #Pass that exact youtube_url string into your updated uploader module!
-            insta_uploader.upload_to_instagram(video_path, description_text)
+            print("📸 Transferring public media references to Meta Graph Network...")
+            insta_uploader.upload_to_instagram(
+                public_video_url=public_github_video_url, 
+                caption_text=description_text, 
+                buy_link=product_url
+            )
             
             #2. Telegram Upload (Funnel the captured YouTube URL string directly into our layout parameter)
             telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)                
