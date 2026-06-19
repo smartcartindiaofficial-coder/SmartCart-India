@@ -535,7 +535,7 @@ def start_daily_routine():
             repo_name = "smartcart-deals"
             
             video_filename = os.path.basename(video_path) 
-            public_github_video_url = f"https://{github_username}.github.io/{repo_name}/Exports/{video_filename}"
+            public_github_video_url = f"https://raw.githubusercontent.com/{github_username}/{repo_name}/main/Exports/{video_filename}"
 
             #Pass that exact youtube_url string into your updated uploader module!
             print("📸 Transferring public media references to Meta Graph Network...")
