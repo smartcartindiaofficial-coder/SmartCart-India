@@ -541,7 +541,7 @@ def start_daily_routine():
             print("📸 Transferring public media references to Meta Graph Network...")
             insta_uploader.upload_to_instagram(
                 public_video_url=public_github_video_url, 
-                caption_text=description_text, 
+                description_text=description_text, 
                 buy_link=product_url
             )
             
