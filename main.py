@@ -406,7 +406,8 @@ def start_daily_routine():
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     
     try:
-        pool_size = int(os.getenv("pool_size"))
+        pool_size_env = os.getenv("pool_size")
+        pool_size = int(pool_size_env) if pool_size_env else 5
         products_pool = scout.get_bestsellers(driver, count = pool_size)
         if not products_pool:
             print("❌ No products found on Amazon.")
