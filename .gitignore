@@ -1,11 +1,11 @@
-# Ignore local environment variable parameters
+# Sensitive environment credentials
 Config.env
+*.env
 
-# Ignore YouTube API structural credentials and tokens
-client_secrets.json
+# Google API login tokens and secrets
 token.pickle
+client_secrets.json
 
-# Ignore runtime output folders and temporary video components
-Exports/
-temp_*.jpg
-manual_temp_*.jpg
+# Local network tools and cache
+ngrok.exe
+__pycache__/
