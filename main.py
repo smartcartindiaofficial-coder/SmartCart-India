@@ -1,4 +1,5 @@
 import os
+import sys
 import shutil
 import pandas as pd
 from datetime import datetime
@@ -32,7 +33,11 @@ from webdriver_manager.chrome import ChromeDriverManager
 # --- SETTINGS ---
 BRAVE_PATH = os.getenv("BRAVE_BROWSER_PATH")
 BRAVE_USER_DATA = os.path.normpath(os.getenv("BRAVE_USER_DATA_DIR"))
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 HISTORY_FILE = os.path.join(BASE_DIR, os.getenv("HISTORY_FILE"))
 BASE_EXPORT_FOLDER = "Exports"
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))

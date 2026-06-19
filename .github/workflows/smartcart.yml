@@ -46,6 +46,7 @@ jobs:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
         INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
+        Affiliate_Code: ${{ secrets.Affiliate_Code }}
       run: python main.py
 
     # 6. Capture changes to upload_history.csv and index.html, then commit back to repo
