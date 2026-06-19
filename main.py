@@ -26,6 +26,7 @@ import thumbnail_engine
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 
 # --- SETTINGS ---
@@ -378,12 +379,11 @@ def start_daily_routine():
     os.system("taskkill /f /im brave.exe >nul 2>&1")
     time.sleep(2)
 
-    options = webdriver.ChromeOptions()
-    options.binary_location = BRAVE_PATH
-    options.add_argument(f"--user-data-dir={BRAVE_USER_DATA}")
-    options.add_argument(r'--profile-directory=Default')
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
+    options = Options()
+    options.add_argument("--headless=new") # Required for Cloud virtual machines
+    options.add_argument("--no-sandbox")   # Required for Linux server permissions
+    options.add_argument("--disable-dev-shm-usage") # Overcomes limited resource problems
+    options.add_argument("--disable-gpu")
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     
