@@ -420,7 +420,10 @@ def start_daily_routine():
             print(f"Total {len(products_pool)} products checked, but all are already uploaded. 😴")
             return
         
-        products_found = new_products[:int(os.getenv("Product_Count"))]   
+        product_count_env = os.getenv("Product_Count")
+        product_count = int(product_count_env) if product_count_env else 1
+
+        products_found = new_products[:product_count]  
 
         for i, item in enumerate(products_found):
             print(f"✨ Found new product: {item['name'][:50]}...")
