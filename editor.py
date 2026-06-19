@@ -4,7 +4,15 @@ import cv2
 import numpy as np
 import asyncio
 import edge_tts
-from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip
+
+#from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip
+
+try:
+    # Try importing using the newer MoviePy v2.x structure
+    from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip
+except ImportError:
+    # Fallback to older MoviePy v1.x structure if needed
+    from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip
 
 def generate_voiceover(text, output_audio_path):
     voice_pool = [
