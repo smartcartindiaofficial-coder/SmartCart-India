@@ -407,7 +407,16 @@ def create_pro_video(image_paths, product_name, output_path, voice_text=None):
                 selected_track = random.choice(music_files)
                 print(f"🎵 Layering background audio track: {os.path.basename(selected_track)}")
                 
-                bg_music_clip = AudioFileClip(selected_track).subclip(0, total_duration)
+                # Create a safe compatibility wrapper for slicing clips
+                def safe_subclip(clip, start, end):
+                    if hasattr(clip, "subclipped"):
+                        return clip.subclipped(start, end)  # MoviePy v2.x (Cloud)
+                    return clip.subclip(start, end)          # MoviePy v1.x (Local)
+
+                # Update your audio slicing line inside editor.py to use it:
+                # For example, if your line looked like: bg_music_clip.subclip(0, duration)
+                # Change it to:
+                bg_music_clip = safe_subclip(bg_music_clip, 0, video_clip.duration)
                 
                 if has_voice:
                     voice_cutoff_time = total_duration - outro_duration

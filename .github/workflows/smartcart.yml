@@ -39,7 +39,6 @@ jobs:
     # 5. Execute your main framework script while feeding it keys securely
     - name: Run SmartCart Engine Pipeline
       env:
-        # We safely load all sensitive API keys from GitHub's vault into variables
         AMAZON_AFFILIATE_TAG: ${{ secrets.AMAZON_AFFILIATE_TAG }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
@@ -47,7 +46,11 @@ jobs:
         INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
         INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
         Affiliate_Code: ${{ secrets.Affiliate_Code }}
-      run: python main.py
+        CLIENT_SECRETS_DATA: ${{ secrets.CLIENT_SECRETS_JSON }}
+      run: |
+        # Recreate the json file in the cloud root directory before python runs
+        echo "$CLIENT_SECRETS_DATA" > client_secrets.json
+        python main.py
 
     # 6. Capture changes to upload_history.csv and index.html, then commit back to repo
     - name: Commit and Save Logs & Frontend Progress
