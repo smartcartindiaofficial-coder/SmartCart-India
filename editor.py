@@ -430,7 +430,11 @@ def create_pro_video(image_paths, product_name, output_path, voice_text=None):
 
         if audio_layers:
             final_audio_mix = CompositeAudioClip(audio_layers)
-            final_output_clip = video_clip.set_audio(final_audio_mix)
+            # Adapt dynamically between MoviePy v1 (set_audio) and v2 (with_audio)
+            if hasattr(video_clip, "with_audio"):
+                final_output_clip = video_clip.with_audio(final_audio_mix)  # v2.x
+            else:
+                final_output_clip = video_clip.set_audio(final_audio_mix)   # v1.x
         else:
             final_output_clip = video_clip
 
