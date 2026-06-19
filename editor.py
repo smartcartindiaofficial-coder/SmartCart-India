@@ -417,9 +417,14 @@ def create_pro_video(image_paths, product_name, output_path, voice_text=None):
                 
                 if has_voice:
                     voice_cutoff_time = total_duration - outro_duration
-                    bg_music_clip = bg_music_clip.fl(lambda gf, t: gf(t) * np.where(t < voice_cutoff_time, 0.06, 0.18)[:, np.newaxis])
+                    duck_filter = lambda gf, t: gf(t) * np.where(t < voice_cutoff_time, 0.06, 0.18)[:, np.newaxis]
+                    
+                    if hasattr(bg_music_clip, "fl"):
+                        bg_music_clip = bg_music_clip.fl(duck_filter)
+                    else:
+                        bg_music_clip = bg_music_clip.transform(duck_filter)
                 else:
-                    bg_music_clip = bg_music_clip.volumex(0.12)
+                    bg_music_clip = bg_music_clip.volumex(0.12) if hasattr(bg_music_clip, "volumex") else bg_music_clip.multiply_volume(0.12)
                     
                 audio_layers.append(bg_music_clip)
 

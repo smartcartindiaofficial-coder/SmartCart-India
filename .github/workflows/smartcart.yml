@@ -47,6 +47,7 @@ jobs:
         INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
         Affiliate_Code: ${{ secrets.Affiliate_Code }}
         CLIENT_SECRETS_DATA: ${{ secrets.CLIENT_SECRETS_JSON }}
+        TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
       run: |
         # Recreate the json file in the cloud root directory before python runs
         echo "$CLIENT_SECRETS_DATA" > client_secrets.json
