@@ -5,8 +5,6 @@ import numpy as np
 import asyncio
 import edge_tts
 
-#from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip
-
 try:
     # Try importing using the newer MoviePy v2.x structure
     from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip
@@ -413,10 +411,9 @@ def create_pro_video(image_paths, product_name, output_path, voice_text=None):
                         return clip.subclipped(start, end)  # MoviePy v2.x (Cloud)
                     return clip.subclip(start, end)          # MoviePy v1.x (Local)
 
-                # Update your audio slicing line inside editor.py to use it:
-                # For example, if your line looked like: bg_music_clip.subclip(0, duration)
-                # Change it to:
-                bg_music_clip = safe_subclip(bg_music_clip, 0, video_clip.duration)
+                # Fix: Properly instantiate the background audio clip before slicing it
+                base_music = AudioFileClip(selected_track)
+                bg_music_clip = safe_subclip(base_music, 0, video_clip.duration)
                 
                 if has_voice:
                     voice_cutoff_time = total_duration - outro_duration
@@ -451,7 +448,7 @@ def create_pro_video(image_paths, product_name, output_path, voice_text=None):
         final_output_clip.close()
         video_clip.close()
         if has_voice: voice_clip.close()
-        if os.path.exists(bg_music_dir) and music_files and 'bg_music_clip' in locals(): 
+        if os.path.exists(bg_music_dir) and music_files and 'bg_music_clip' in locals() and bg_music_clip is not None: 
             bg_music_clip.close()
         
         if os.path.exists(temp_video_path): os.remove(temp_video_path)
