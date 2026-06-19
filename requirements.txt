@@ -8,6 +8,7 @@ moviepy
 opencv-python
 numpy
 edge-tts
+onnxruntime
 rembg
 pillow
 requests
