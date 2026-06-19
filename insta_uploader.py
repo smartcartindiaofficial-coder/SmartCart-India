@@ -4,7 +4,12 @@ import requests
 import http.server
 import socketserver
 import threading
-from pyngrok import ngrok, conf
+try:
+    from pyngrok import ngrok, conf
+except ImportError:
+    print("🌐 Running in cloud environment: 'pyngrok' module bypassed.")
+    ngrok = None
+    conf = None
 from dotenv import load_dotenv
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -164,9 +169,11 @@ def upload_to_instagram(video_path, caption):
     finally:
         print("🧹 Tearing down secure tunnel and closing local file server...")
         try:
-            if 'public_url' in locals() and public_url:
+            # Check if ngrok module was imported before calling disconnect/kill
+            if ngrok and 'public_url' in locals() and public_url:
                 ngrok.disconnect(public_url)
-            ngrok.kill()
+            if ngrok:
+                ngrok.kill()
             
             if 'httpd' in locals() and httpd:
                 httpd.shutdown()       # Stops the serve_forever loop
