@@ -531,7 +531,7 @@ def start_daily_routine():
             print(f"✅ Product {asin} Published to YouTube via API.")
 
             # 🔗 Dynamically construct the public GitHub Pages URL
-            github_username = os.getenv("GITHUB_USERNAME", "default_fallback")
+            github_username = os.getenv("GITHUB_USERNAME", "smartcartindiaofficial-coder")
             repo_name = "smartcart-deals"
             
             relative_video_path = os.path.relpath(video_path, BASE_DIR).replace('\\', '/')
