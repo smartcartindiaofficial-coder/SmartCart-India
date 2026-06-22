@@ -543,7 +543,7 @@ def start_daily_routine():
             #Pass that exact youtube_url string into your updated uploader module!
             print("📸 Transferring public media references to Meta Graph Network...")
             insta_uploader.upload_to_instagram(
-                public_github_video_url, 
+                video_path, 
                 description_text, 
                 product_url
             )
