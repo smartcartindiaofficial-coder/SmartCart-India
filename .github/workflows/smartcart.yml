@@ -39,6 +39,7 @@ jobs:
     # 5. Execute your main framework script while feeding it keys securely
     - name: Run SmartCart Engine Pipeline
       env:
+        HISTORY_FILE: "upload_history.csv"
         AMAZON_AFFILIATE_TAG: ${{ secrets.AMAZON_AFFILIATE_TAG }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
@@ -61,7 +62,7 @@ jobs:
       run: |
         git config --local user.email "actions@github.com"
         git config --local user.name "GitHub Automation Bot"
-        git add upload_history.csv index.html assets/
+        git add upload_history.csv index.html assets/ Exports/
         # The || true prevents the script from crashing if there are no new deals to save
-        git commit -m "Automated Sync: History & Deals Updated [skip ci]" || true
+        git diff-index --quiet HEAD || git commit -m "Automated Sync: History & Deals Updated [skip ci]" || true
         git push
