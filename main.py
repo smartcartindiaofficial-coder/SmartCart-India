@@ -543,9 +543,9 @@ def start_daily_routine():
             #Pass that exact youtube_url string into your updated uploader module!
             print("📸 Transferring public media references to Meta Graph Network...")
             insta_uploader.upload_to_instagram(
-                public_video_url=public_github_video_url, 
-                description_text=description_text, 
-                buy_link=product_url
+                public_github_video_url, 
+                description_text, 
+                product_url
             )
             
             #2. Telegram Upload (Funnel the captured YouTube URL string directly into our layout parameter)
