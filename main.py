@@ -448,6 +448,7 @@ def start_daily_routine():
 
             if not temp_images:
                 start_daily_routine()
+                return
 
             folder = get_save_path(asin, prefix="Product")
             video_path = os.path.join(folder, f"Video_{asin}.mp4")
