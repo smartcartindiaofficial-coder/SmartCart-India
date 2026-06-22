@@ -18,13 +18,41 @@ def clean_amazon_url(url):
         return f"https://amazon.in/dp/{asin}/?tag={os.getenv('Affiliate_Code')}"
     return url
 
-def upload_to_instagram(public_video_url, description_text, buy_link):
+def upload_to_tmpfiles(local_video_path):
     """
-    Accepts a public internet URL (hosted on GitHub Pages) 
+    Uploads the local video file to tmpfiles.org to get an instant,
+    publicly accessible raw URL for Meta ingestion.
+    """
+    print(f"☁️ Uploading temporary video asset to cloud provider for Meta parsing...")
+    try:
+        url = "https://tmpfiles.org/api/v1/upload"
+        with open(local_video_path, 'rb') as f:
+            files = {'file': f}
+            res = requests.post(url, files=files).json()
+            
+        # tmpfiles.org returns a view URL; we must change it to a raw download URL
+        # Example conversion: https://tmpfiles.org/123/video.mp4 -> https://tmpfiles.org/dl/123/video.mp4
+        view_url = res['data']['url']
+        raw_url = view_url.replace("https://tmpfiles.org/", "https://tmpfiles.org/dl/")
+        print(f"🔗 Public temporary URL generated: {raw_url}")
+        return raw_url
+    except Exception as e:
+        print(f"❌ Temporary cloud upload failed: {e}")
+        return None
+
+def upload_to_instagram(local_video_path, description_text, buy_link):
+    """
+    Accepts the local file path on the runner, uploads it temporarily,
     and passes it straight to Meta Graph API.
     """
     if not ACCESS_TOKEN or not INSTAGRAM_ACCOUNT_ID:
         print("❌ Instagram Credentials missing from environment.")
+        return None
+
+    # Get a working public URL instantly
+    public_video_url = upload_to_tmpfiles(local_video_path)
+    if not public_video_url:
+        print("❌ Aborting Instagram post: Could not generate public file asset link.")
         return None
 
     print(f"🎬 Initiating Meta Container Ingestion for URL: {public_video_url}")
@@ -77,7 +105,7 @@ def upload_to_instagram(public_video_url, description_text, buy_link):
             
             # Step 4: Drop First Comment (Affiliate Link)
             try:
-                comment_url = {f"https://graph.facebook.com/v19.0/{published_media_id}/comments"}
+                comment_url = f"https://graph.facebook.com/v19.0/{published_media_id}/comments"
                 comment_payload = {
                     'message': f"🛍️ Direct buy link: {clean_amazon_url(buy_link)}",
                     'access_token': ACCESS_TOKEN
