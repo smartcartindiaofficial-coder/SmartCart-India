@@ -446,6 +446,9 @@ def start_daily_routine():
             tags = item.get('tags', 'amazon, deals, india')
             temp_images = item.get('images', [])
 
+            if not temp_images:
+                start_daily_routine()
+
             folder = get_save_path(asin, prefix="Product")
             video_path = os.path.join(folder, f"Video_{asin}.mp4")
             desc_path = os.path.join(folder, f"desc_{asin}.txt")
