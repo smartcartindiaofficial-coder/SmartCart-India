@@ -3,9 +3,9 @@ name: SmartCart India Automation
 on:
   schedule:
     # GitHub uses UTC (Universal Time). We subtract 5 hours and 30 minutes from IST.
-    - cron: '0 3 * * *'   # 3:00 AM UTC = 8:30 AM IST (Morning Run)
-    - cron: '0 8 * * *'   # 8:00 AM UTC = 1:30 PM IST (Afternoon Run)
-    - cron: '0 14 * * *'  # 2:00 PM UTC = 7:30 PM IST (Evening Run)
+    - cron: '18 3 * * *'   # ~8:48 AM IST (Morning Run)
+    - cron: '23 8 * * *'   # ~1:53 PM IST (Afternoon Run)
+    - cron: '12 14 * * *'  # ~7:42 PM IST (Evening Run)
   workflow_dispatch:      # This allows you to click a button on GitHub to test it manually anytime!
 
 jobs:
