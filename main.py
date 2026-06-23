@@ -411,6 +411,7 @@ def start_daily_routine():
         products_pool = scout.get_bestsellers(driver, count = pool_size)
         if not products_pool:
             print("❌ No products found on Amazon.")
+            start_daily_routine()
             return
         
         uploaded_asins = get_uploaded_asins() 
