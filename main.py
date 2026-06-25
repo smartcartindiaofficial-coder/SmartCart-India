@@ -383,202 +383,135 @@ def get_uploaded_asins():
         return set()
 
 def start_daily_routine():
-    print("🧹 Closing Brave Browser sessions...")
-    os.system("taskkill /f /im brave.exe >nul 2>&1")
-    time.sleep(2)
-
-    options = webdriver.ChromeOptions()
-    # Check if running in GitHub Actions cloud or locally
-    if os.getenv("GITHUB_ACTIONS") == "true":
-        print("🌐 Cloud Environment Detected: Configuring Headless Chromium...")
-        options.add_argument("--headless=new")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        # GitHub Action runners have Chromium pre-mapped to default paths
-        driver = webdriver.Chrome(options=options)
-    else:
-        print("💻 Local Environment Detected: Launching Local Brave Instance...")
-        if BRAVE_PATH:
-            options.binary_location = BRAVE_PATH
-        if BRAVE_USER_DATA:
-            options.add_argument(f"--user-data-dir={BRAVE_USER_DATA}")
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    product_found = False
     
-    try:
-        pool_size_env = os.getenv("pool_size")
-        pool_size = int(pool_size_env) if pool_size_env else 5
-        products_pool = scout.get_bestsellers(driver, count = pool_size)
-        if not products_pool:
-            print("❌ No products found on Amazon.")
-            start_daily_routine()
-            return
+    while not product_found:
+        print("🧹 Closing Brave Browser sessions...")
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            # Extra safety step for cloud runners to kill hung processes
+            pass 
+        else:
+            os.system("taskkill /f /im brave.exe >nul 2>&1")
+        time.sleep(2)
+
+        options = webdriver.ChromeOptions()
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            print("🌐 Cloud Environment Detected: Configuring Headless Chromium...")
+            options.add_argument("--headless=new")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-gpu")
+            driver = webdriver.Chrome(options=options)
+        else:
+            print("💻 Local Environment Detected: Launching Local Brave Instance...")
+            if BRAVE_PATH:
+                options.binary_location = BRAVE_PATH
+            if BRAVE_USER_DATA:
+                options.add_argument(f"--user-data-dir={BRAVE_USER_DATA}")
+            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
         
-        uploaded_asins = get_uploaded_asins() 
-        new_products = [p for p in products_pool if p['asin'] not in uploaded_asins]
-
-        if not new_products:
-            print(f"Total {len(products_pool)} products checked, but all are already uploaded. 😴")
-            return
-        
-        product_count_env = os.getenv("Product_Count")
-        product_count = int(product_count_env) if product_count_env else 1
-
-        products_found = new_products[:product_count]  
-
-        for i, item in enumerate(products_found):
-            print(f"✨ Found new product: {item['name'][:50]}...")
-            asin = item.get('asin')
-
-            if asin in uploaded_asins:
-                print(f"⏭️ Skipping {asin} - already uploaded.")
+        try:
+            pool_size_env = os.getenv("pool_size")
+            pool_size = int(pool_size_env) if pool_size_env else 5
+            products_pool = scout.get_bestsellers(driver, count=pool_size)
+            
+            if not products_pool:
+                print("❌ No products found on Amazon category page. Retrying fresh loop...")
+                driver.quit()
                 continue
-
-            raw_name = item.get('name')
-            # Call your new catchy title transformer
-            #safe_name = get_crisp_catchy_title(raw_name)
-            safe_name = raw_name
-
-            # Ensure it doesn't break character boundaries down the road
-            # if len(safe_name) > 100:
-            #     safe_name = safe_name[:100].strip()
-
-            specs = item.get('specs', '').replace(" | ","\n-")
-            tags = item.get('tags', 'amazon, deals, india')
-            temp_images = item.get('images', [])
-
-            if not temp_images:
-                start_daily_routine()
-                return
-
-            folder = get_save_path(asin, prefix="Product")
-            video_path = os.path.join(folder, f"Video_{asin}.mp4")
-            desc_path = os.path.join(folder, f"desc_{asin}.txt")
             
-            final_images = []
-            for idx, img in enumerate(temp_images):
-                dest = os.path.join(folder, f"img_{idx}.jpg")
-                if os.path.exists(img):
-                    shutil.move(img, dest)
-                    final_images.append(dest)            
+            uploaded_asins = get_uploaded_asins() 
+            new_products = [p for p in products_pool if p['asin'] not in uploaded_asins]
+
+            if not new_products:
+                print(f"Total {len(products_pool)} products checked, but all are already uploaded. 😴 Retrying...")
+                driver.quit()
+                continue
             
-            # --- 🎙️ GENERATING THE NARRATION SCRIPT FOR THE VOICEOVER ---
-            # Extract first 2 bullet points from specifications for a clean, short audio loop
-            # clean_specs_list = [s.strip() for s in specs.split('\n-') if s.strip()]
-            # short_specs_summary = " ".join(clean_specs_list[:2])
+            product_count_env = os.getenv("Product_Count")
+            product_count = int(product_count_env) if product_count_env else 1
+            products_found = new_products[:product_count]  
 
-            viral_title, viral_voiceover_script = reframe_product_for_youtube(safe_name, specs)
-            
-            # Construct a high-retention narration voice hook
-            voice_script = f"{viral_title}. {viral_voiceover_script}."
-            print(f"💬 Generated script text: {voice_script}")
+            for i, item in enumerate(products_found):
+                print(f"✨ Found new product: {item['name'][:50]}...")
+                asin = item.get('asin')
 
-            # ─── NEW: GENERATE THE DYNAMIC THUMBNAIL FIRST ───
-            print("🎨 Invoking Dynamic Thumbnail Engine to compile video hook frame...")
-            # Clean specs array conversion to pass cleanly to the thumbnail cards
-            clean_specs_list = [s.strip() for s in specs.split('\n-') if s.strip()]
-            
-            generated_thumb_path = thumbnail_engine.generate_thumbnail_multi(
-                asin=asin,
-                product_name=viral_title, # Pass the viral clean name for high-impact typography
-                specifications=[],
-                image_paths_list=final_images
-            )
-            
-            # If the engine compiles successfully, slide it into the absolute front of the video list
-            video_render_images = final_images.copy()
-            if generated_thumb_path and os.path.exists(generated_thumb_path):
-                video_render_images.insert(0, generated_thumb_path)
-                print("📌 Thumbnail successfully prioritized as frame 0 for the video timeline.")
+                if asin in uploaded_asins:
+                    print(f"⏭️ Skipping {asin} - already uploaded.")
+                    continue
 
-            # Pass the constructed script text down into your newly updated editor module
-            editor.create_pro_video(video_render_images, viral_title, video_path, voice_text=voice_script)
+                safe_name = item.get('name')
+                specs = item.get('specs', '').replace(" | ","\n-")
+                temp_images = item.get('images', [])
 
-            if generated_thumb_path and os.path.exists(generated_thumb_path):
-                thumb_dest_path = os.path.join(folder, f"tn_{asin}.jpg")
-                shutil.move(generated_thumb_path, thumb_dest_path)
-                print(f"📦 Thumbnail moved cleanly to asset archive: {thumb_dest_path}")   
-            
-            # Form clean full protocol tracking link
-            product_url = f"https://www.amazon.in/dp/{asin}?tag={os.getenv('Affiliate_Code')}"
+                if not temp_images:
+                    print("⚠️ Missing images for this selection. Retrying loop...")
+                    break # Breaks the inner loop, drops to finally, quits driver, and runs while loop again
 
-            # --- 📈 DYNAMIC ALGORITHMIC TAG COMPILER ---
-            # 1. Identify which category scout.py extracted (Fallback to Default if missing)
-            current_category = item.get('category', 'Default')
-            selected_tags = CATEGORY_HASHTAGS.get(current_category, CATEGORY_HASHTAGS["Default"])
-            
-            # 2. Compile into a clean string string separated by single spaces for description files
-            hashtag_string_block = " ".join(selected_tags)
-            
-            # 3. Clean up the tags into standard comma layout for YouTube's hidden backend registry
-            backend_yt_tags = ", ".join([tag.replace("#", "").lower() for tag in selected_tags])
-            # ───────────────────────────────────────────
+                # Let the loop know we found a valid product so we can terminate the while condition
+                product_found = True
 
-            # 6. SAVE DESCRIPTION FILE (Loaded with contextual optimization strings)
-            description_text = (
-                f"📦 {viral_title}\n\n"
-                #f"Features:\n-{specs}\n\n"        
-                f"Buy Link: {product_url}\n\n"
-                "#(ad) As an Amazon Associate I earn from qualifying purchases.\n"
-                f"{hashtag_string_block}" # Placed perfectly at the baseline footer
-            )
-            
-            desc_path = os.path.join(folder, "description.txt")
+                folder = get_save_path(asin, prefix="Product")
+                video_path = os.path.join(folder, f"Video_{asin}.mp4")
+                
+                final_images = []
+                for idx, img in enumerate(temp_images):
+                    dest = os.path.join(folder, f"img_{idx}.jpg")
+                    if os.path.exists(img):
+                        shutil.move(img, dest)
+                        final_images.append(dest)            
+                
+                viral_title, viral_voiceover_script = reframe_product_for_youtube(safe_name, specs)
+                voice_script = f"{viral_title}. {viral_voiceover_script}."
+                print(f"💬 Generated script text: {voice_script}")
 
-            with open(desc_path, "w", encoding="utf-8") as f:
-                f.write(description_text)
+                print("🎨 Invoking Dynamic Thumbnail Engine...")
+                generated_thumb_path = thumbnail_engine.generate_thumbnail_multi(
+                    asin=asin, product_name=viral_title, specifications=[], image_paths_list=final_images
+                )
+                
+                video_render_images = final_images.copy()
+                if generated_thumb_path and os.path.exists(generated_thumb_path):
+                    video_render_images.insert(0, generated_thumb_path)
 
-            print(f"📄 Description created at: {desc_path}")
-            print(f"✅ Product saved to: {folder}")            
+                editor.create_pro_video(video_render_images, viral_title, video_path, voice_text=voice_script)
 
-            # 1. YouTube Upload (Returns the active Shorts URL string)
-            youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
-            print(f"✅ Product {asin} Published to YouTube via API.")
+                if generated_thumb_path and os.path.exists(generated_thumb_path):
+                    thumb_dest_path = os.path.join(folder, f"tn_{asin}.jpg")
+                    shutil.move(generated_thumb_path, thumb_dest_path)
+                
+                product_url = f"https://www.amazon.in/dp/{asin}?tag={os.getenv('Affiliate_Code')}"
+                current_category = item.get('category', 'Default')
+                selected_tags = CATEGORY_HASHTAGS.get(current_category, CATEGORY_HASHTAGS["Default"])
+                hashtag_string_block = " ".join(selected_tags)
+                backend_yt_tags = ", ".join([tag.replace("#", "").lower() for tag in selected_tags])
 
-            # 🔗 Dynamically construct the public GitHub Pages URL
-            github_username = os.getenv("GITHUB_USERNAME", "smartcartindiaofficial-coder")
-            repo_name = "smartcart-deals"
-            
-            relative_video_path = os.path.relpath(video_path, BASE_DIR).replace('\\', '/')
+                description_text = (
+                    f"📦 {viral_title}\n\nBuy Link: {product_url}\n\n"
+                    "#(ad) As an Amazon Associate I earn from qualifying purchases.\n"
+                    f"{hashtag_string_block}"
+                )
+                
+                desc_path = os.path.join(folder, "description.txt")
+                with open(desc_path, "w", encoding="utf-8") as f:
+                    f.write(description_text)
 
-            public_github_video_url = f"https://raw.githubusercontent.com/{github_username}/{repo_name}/main/{relative_video_path}"
+                youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
+                insta_uploader.upload_to_instagram(video_path, description_text, product_url)
+                telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)                
 
-            print(f"📸 Transferring public media references to Meta Graph Network using path: {public_github_video_url}")
+                record_upload(asin, viral_title)
 
-            #Pass that exact youtube_url string into your updated uploader module!
-            print("📸 Transferring public media references to Meta Graph Network...")
-            insta_uploader.upload_to_instagram(
-                video_path, 
-                description_text, 
-                product_url
-            )
-            
-            #2. Telegram Upload (Funnel the captured YouTube URL string directly into our layout parameter)
-            telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)                
-
-            #Record to history file
-            record_upload(asin, viral_title)
-
-            # 🌐 NEW: UPDATE LINK-IN-BIO LANDING PAGE
-            primary_thumbnail = ""
-            if final_images and len(final_images) > 0:
-                primary_thumbnail = final_images[0] # Points to folder/img_0.jpg
-
-            compile_landing_page(
-                asin=asin,
-                name=viral_title,
-                product_url=product_url,
-                local_image_path=primary_thumbnail, # Passing the local file path
-                price=item.get('price', 'Check Price')
-            )
-            
-            # 🚀 NEW: PUSH UPDATES LIVE TO GITHUB PAGES
-            # sync_landing_page_to_github()
-
-    finally:
-        driver.quit()
-        print("🧹 Cleaning up unused product images...")
-        cleanup_temp_files()
+                primary_thumbnail = final_images[0] if final_images else ""
+                compile_landing_page(
+                    asin=asin, name=viral_title, product_url=product_url,
+                    local_image_path=primary_thumbnail, price=item.get('price', 'Check Price')
+                )
+                
+        finally:
+            driver.quit()
+            print("🧹 Cleaning up unused product images...")
+            cleanup_temp_files()
         
 
 def is_already_uploaded(asin, HISTORY_FILE):
