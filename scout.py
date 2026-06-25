@@ -133,7 +133,7 @@ def get_bestsellers(driver, count):
     print(f"🎲 Randomly selected category: {cat_name}")
     
     driver.get(cat_url)
-    time.sleep(3)
+    time.sleep(30)
     products = []
     
     for i in range(count):
@@ -153,10 +153,26 @@ def get_bestsellers(driver, count):
             asin = link.split("/dp/")[1].split("/")[0]
             
             driver.get(link)
-            time.sleep(4)
+            driver.execute_script("window.scrollTo(0, 400);")
+            time.sleep(3)
+            driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(30)
             
             img_paths = []
-            thumbs = driver.find_elements(By.CSS_SELECTOR, "#altImages img")
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            from selenium.webdriver.common.by import By
+
+            try:
+                # Wait up to 10 seconds for at least one thumbnail image to appear in the DOM
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_block_located((By.CSS_SELECTOR, "#altImages img"))
+                )
+                thumbs = driver.find_elements(By.CSS_SELECTOR, "#altImages img")
+            except Exception:
+                print("⏳ Timed out waiting for #altImages. Attempting emergency fallback selector...")
+                thumbs = driver.find_elements(By.CSS_SELECTOR, "#landingImage, #imgBlkFront, .imgTagWrapper img")
+
             found = 0
             for idx, img in enumerate(thumbs):
                 if found >= 7: break
@@ -164,11 +180,21 @@ def get_bestsellers(driver, count):
                 
                 src = img.get_attribute("src")
                 if src and "play-button" not in src:
-                    high_res = src.split("._")[0] + ".jpg"
-                    local_file = os.path.join(os.getcwd(), f"temp_{i}_{idx}.jpg")
-                    urllib.request.urlretrieve(high_res, local_file)
-                    img_paths.append(local_file)
-                    found += 1
+                    high_res = src.split(". _")[0] + ".jpg"
+                    if "._" in src:
+                        high_res = src.split("._")[0] + ".jpg"
+                    
+                    try:
+                        local_file = os.path.join(os.getcwd(), f"manual_temp_{found}.jpg")
+                        opener = urllib.request.build_opener()
+                        opener.addheaders = [('User-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')]
+                        urllib.request.install_opener(opener)                    
+                        urllib.request.urlretrieve(high_res, local_file)                    
+                        if os.path.getsize(local_file) > 1000: # Ensure it's a real valid image
+                            img_paths.append(local_file)
+                            found += 1
+                    except Exception as e:
+                        print(f"❌ Download failed: {e}")
             
             bullets = driver.find_elements(By.CSS_SELECTOR, "#feature-bullets ul li span, #pqv-feature-bullets ul li span")
             specs = " | ".join([b.text.strip() for b in bullets if len(b.text.strip()) > 10][:7])
