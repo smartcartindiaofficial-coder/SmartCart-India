@@ -129,6 +129,11 @@ def generate_tags(name, specs):
     return ", ".join(list(set(base_tags + keywords)))
 
 def get_bestsellers(driver, count):
+
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.common.by import By
+    
     cat_name, cat_url = random.choice(list(CATEGORIES.items()))
     print(f"🎲 Randomly selected category: {cat_name}")
     
@@ -158,10 +163,7 @@ def get_bestsellers(driver, count):
             driver.execute_script("window.scrollTo(0, 0);")
             time.sleep(30)
             
-            img_paths = []
-            from selenium.webdriver.support.ui import WebDriverWait
-            from selenium.webdriver.support import expected_conditions as EC
-            from selenium.webdriver.common.by import By
+            img_paths = []           
 
             try:
                 # Wait up to 10 seconds for at least one thumbnail image to appear in the DOM
