@@ -150,12 +150,16 @@ def get_bestsellers(driver, count):
 
             name = card.text.split('\n')[0].strip()
 
+            print(f"🎲 Product Name: {name}")
+
             if any(keyword in name for keyword in blacklist):
                 print(f"⏭️ Skipping: {name}")
                 continue
 
             link = card.find_element(By.TAG_NAME, "a").get_attribute("href")
             asin = link.split("/dp/")[1].split("/")[0]
+
+            print(f"🎲 Product details: {name}:{link}:{asin}")
             
             driver.get(link)
             driver.execute_script("window.scrollTo(0, 400);")
@@ -163,8 +167,7 @@ def get_bestsellers(driver, count):
             driver.execute_script("window.scrollTo(0, 0);")
             time.sleep(30)
             
-            img_paths = []           
-
+            img_paths = []
             try:
                 # Wait up to 10 seconds for at least one thumbnail image to appear in the DOM
                 WebDriverWait(driver, 10).until(
