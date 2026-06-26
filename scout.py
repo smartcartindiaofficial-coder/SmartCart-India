@@ -190,7 +190,7 @@ def get_bestsellers(driver, count):
                         high_res = src.split("._")[0] + ".jpg"
                     
                     try:
-                        local_file = os.path.join(os.getcwd(), f"manual_temp_{found}.jpg")
+                        local_file = os.path.join(os.getcwd(), f"temp_{i}_{idx}.jpg")
                         opener = urllib.request.build_opener()
                         opener.addheaders = [('User-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')]
                         urllib.request.install_opener(opener)                    
