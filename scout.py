@@ -150,16 +150,12 @@ def get_bestsellers(driver, count):
 
             name = card.text.split('\n')[0].strip()
 
-            print(f"🎲 Product Name: {name}")
-
             if any(keyword in name for keyword in blacklist):
                 print(f"⏭️ Skipping: {name}")
                 continue
 
             link = card.find_element(By.TAG_NAME, "a").get_attribute("href")
             asin = link.split("/dp/")[1].split("/")[0]
-
-            print(f"🎲 Product details: {name}:{link}:{asin}")
             
             driver.get(link)
             driver.execute_script("window.scrollTo(0, 400);")
@@ -172,12 +168,11 @@ def get_bestsellers(driver, count):
                 # 1. Broaden wait to accept both uppercase, lowercase, and list-item layouts
                 WebDriverWait(driver, 10).until(
                     lambda d: d.find_elements(By.CSS_SELECTOR, "#altImages img") or 
-                            d.find_elements(By.CSS_SELECTOR, "#altimages img") or
-                            d.find_elements(By.CSS_SELECTOR, ".a-spacing-small img")
+                            d.find_elements(By.CSS_SELECTOR, "#altimages img")
                 )
                 
                 # 2. Gather whichever thumbnail matches exist
-                thumbs = driver.find_elements(By.CSS_SELECTOR, "#altImages img, #altimages img, .a-spacing-small img")
+                thumbs = driver.find_elements(By.CSS_SELECTOR, "#altImages img, #altimages img")
                 print(f"✅ Successfully found thumbnail array. Elements located: {len(thumbs)}")
                 
             except Exception:
@@ -185,6 +180,8 @@ def get_bestsellers(driver, count):
                 # Emergency fallback: Try the main display images
                 thumbs = driver.find_elements(By.CSS_SELECTOR, "#landingImage, #imgBlkFront, .imgTagWrapper img")
             
+            print(f"image count in thumbs variable: {len(thumbs)}")
+
             found = 0
             for idx, img in enumerate(thumbs):
                 if found >= 7: break
@@ -211,6 +208,8 @@ def get_bestsellers(driver, count):
             bullets = driver.find_elements(By.CSS_SELECTOR, "#feature-bullets ul li span, #pqv-feature-bullets ul li span")
             specs = " | ".join([b.text.strip() for b in bullets if len(b.text.strip()) > 10][:7])
             
+            print(f"image count in img_paths variable: {len(img_paths)}")
+
             products.append({
                 "asin": asin, "name": name, "link": f"{link}?tag=smartcart03b-21",
                 "images": img_paths, "specs": specs, "tags": generate_tags(name, specs)
