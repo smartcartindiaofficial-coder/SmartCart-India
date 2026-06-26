@@ -169,15 +169,22 @@ def get_bestsellers(driver, count):
             
             img_paths = []
             try:
-                # Wait up to 10 seconds for at least one thumbnail image to appear in the DOM
+                # 1. Broaden wait to accept both uppercase, lowercase, and list-item layouts
                 WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_block_located((By.CSS_SELECTOR, "#altImages img"))
+                    lambda d: d.find_elements(By.CSS_SELECTOR, "#altImages img") or 
+                            d.find_elements(By.CSS_SELECTOR, "#altimages img") or
+                            d.find_elements(By.CSS_SELECTOR, ".a-spacing-small img")
                 )
-                thumbs = driver.find_elements(By.CSS_SELECTOR, "#altImages img")
+                
+                # 2. Gather whichever thumbnail matches exist
+                thumbs = driver.find_elements(By.CSS_SELECTOR, "#altImages img, #altimages img, .a-spacing-small img")
+                print(f"✅ Successfully found thumbnail array. Elements located: {len(thumbs)}")
+                
             except Exception:
-                print("⏳ Timed out waiting for #altImages. Attempting emergency fallback selector...")
+                print("⏳ Timed out waiting for thumbnail containers. Attempting emergency fallback selector...")
+                # Emergency fallback: Try the main display images
                 thumbs = driver.find_elements(By.CSS_SELECTOR, "#landingImage, #imgBlkFront, .imgTagWrapper img")
-
+            
             print(f"image count in thumbs variable: {len(thumbs)}")
 
             found = 0
