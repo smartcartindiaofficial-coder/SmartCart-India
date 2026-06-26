@@ -185,8 +185,6 @@ def get_bestsellers(driver, count):
                 # Emergency fallback: Try the main display images
                 thumbs = driver.find_elements(By.CSS_SELECTOR, "#landingImage, #imgBlkFront, .imgTagWrapper img")
             
-            print(f"image count in thumbs variable: {len(thumbs)}")
-
             found = 0
             for idx, img in enumerate(thumbs):
                 if found >= 7: break
@@ -213,8 +211,6 @@ def get_bestsellers(driver, count):
             bullets = driver.find_elements(By.CSS_SELECTOR, "#feature-bullets ul li span, #pqv-feature-bullets ul li span")
             specs = " | ".join([b.text.strip() for b in bullets if len(b.text.strip()) > 10][:7])
             
-            print(f"image count in img_paths variable: {len(img_paths)}")
-
             products.append({
                 "asin": asin, "name": name, "link": f"{link}?tag=smartcart03b-21",
                 "images": img_paths, "specs": specs, "tags": generate_tags(name, specs)

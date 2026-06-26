@@ -455,60 +455,59 @@ def start_daily_routine():
                 video_path = os.path.join(folder, f"Video_{asin}.mp4")
                 
                 final_images = []
-                print(f"image count in tmp_images variable: {len(temp_images)}")
+                
                 for idx, img in enumerate(temp_images):
                     dest = os.path.join(folder, f"img_{idx}.jpg")
                     if os.path.exists(img):
                         shutil.move(img, dest)
                         final_images.append(dest)            
                 
-                print(f"image count in final_images variable: {len(final_images)}")
                 viral_title, viral_voiceover_script = reframe_product_for_youtube(safe_name, specs)
                 voice_script = f"{viral_title}. {viral_voiceover_script}."
                 print(f"💬 Generated script text: {voice_script}")
 
                 print("🎨 Invoking Dynamic Thumbnail Engine...")
-                # generated_thumb_path = thumbnail_engine.generate_thumbnail_multi(
-                #     asin=asin, product_name=viral_title, specifications=[], image_paths_list=final_images
-                # )
+                generated_thumb_path = thumbnail_engine.generate_thumbnail_multi(
+                    asin=asin, product_name=viral_title, specifications=[], image_paths_list=final_images
+                )
                 
-                # video_render_images = final_images.copy()
-                # if generated_thumb_path and os.path.exists(generated_thumb_path):
-                #     video_render_images.insert(0, generated_thumb_path)
+                video_render_images = final_images.copy()
+                if generated_thumb_path and os.path.exists(generated_thumb_path):
+                    video_render_images.insert(0, generated_thumb_path)
 
-                # editor.create_pro_video(video_render_images, viral_title, video_path, voice_text=voice_script)
+                editor.create_pro_video(video_render_images, viral_title, video_path, voice_text=voice_script)
 
-                # if generated_thumb_path and os.path.exists(generated_thumb_path):
-                #     thumb_dest_path = os.path.join(folder, f"tn_{asin}.jpg")
-                #     shutil.move(generated_thumb_path, thumb_dest_path)
+                if generated_thumb_path and os.path.exists(generated_thumb_path):
+                    thumb_dest_path = os.path.join(folder, f"tn_{asin}.jpg")
+                    shutil.move(generated_thumb_path, thumb_dest_path)
                 
-                # product_url = f"https://www.amazon.in/dp/{asin}?tag={os.getenv('Affiliate_Code')}"
-                # current_category = item.get('category', 'Default')
-                # selected_tags = CATEGORY_HASHTAGS.get(current_category, CATEGORY_HASHTAGS["Default"])
-                # hashtag_string_block = " ".join(selected_tags)
-                # backend_yt_tags = ", ".join([tag.replace("#", "").lower() for tag in selected_tags])
+                product_url = f"https://www.amazon.in/dp/{asin}?tag={os.getenv('Affiliate_Code')}"
+                current_category = item.get('category', 'Default')
+                selected_tags = CATEGORY_HASHTAGS.get(current_category, CATEGORY_HASHTAGS["Default"])
+                hashtag_string_block = " ".join(selected_tags)
+                backend_yt_tags = ", ".join([tag.replace("#", "").lower() for tag in selected_tags])
 
-                # description_text = (
-                #     f"📦 {viral_title}\n\nBuy Link: {product_url}\n\n"
-                #     "#(ad) As an Amazon Associate I earn from qualifying purchases.\n"
-                #     f"{hashtag_string_block}"
-                # )
+                description_text = (
+                    f"📦 {viral_title}\n\nBuy Link: {product_url}\n\n"
+                    "#(ad) As an Amazon Associate I earn from qualifying purchases.\n"
+                    f"{hashtag_string_block}"
+                )
                 
-                # desc_path = os.path.join(folder, "description.txt")
-                # with open(desc_path, "w", encoding="utf-8") as f:
-                #     f.write(description_text)
+                desc_path = os.path.join(folder, "description.txt")
+                with open(desc_path, "w", encoding="utf-8") as f:
+                    f.write(description_text)
 
-                # youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
-                # insta_uploader.upload_to_instagram(video_path, description_text, product_url)
-                # telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)                
+                youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
+                insta_uploader.upload_to_instagram(video_path, description_text, product_url)
+                telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)                
 
-                # record_upload(asin, viral_title)
+                record_upload(asin, viral_title)
 
-                # primary_thumbnail = final_images[0] if final_images else ""
-                # compile_landing_page(
-                #     asin=asin, name=viral_title, product_url=product_url,
-                #     local_image_path=primary_thumbnail, price=item.get('price', 'Check Price')
-                # )
+                primary_thumbnail = final_images[0] if final_images else ""
+                compile_landing_page(
+                    asin=asin, name=viral_title, product_url=product_url,
+                    local_image_path=primary_thumbnail, price=item.get('price', 'Check Price')
+                )
                 
         finally:
             driver.quit()
