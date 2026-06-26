@@ -455,12 +455,14 @@ def start_daily_routine():
                 video_path = os.path.join(folder, f"Video_{asin}.mp4")
                 
                 final_images = []
+                print(f"image count in tmp_images variable: {len(temp_images)}")
                 for idx, img in enumerate(temp_images):
                     dest = os.path.join(folder, f"img_{idx}.jpg")
                     if os.path.exists(img):
                         shutil.move(img, dest)
                         final_images.append(dest)            
                 
+                print(f"image count in final_images variable: {len(final_images)}")
                 viral_title, viral_voiceover_script = reframe_product_for_youtube(safe_name, specs)
                 voice_script = f"{viral_title}. {viral_voiceover_script}."
                 print(f"💬 Generated script text: {voice_script}")
