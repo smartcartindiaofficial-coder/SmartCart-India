@@ -20,22 +20,90 @@ def generate_voiceover(text, output_audio_path):
         "en-US-AriaNeural",     # Natural US English (Female)
         "en-GB-RyanNeural",     # Professional UK English (Male)
         "en-GB-SoniaNeural"     # Professional UK English (Female)
+        "en-IN-KavyaNeural",      # Female - Natural conversational tone, very popular
+        "en-IN-AnanyaNeural",     # Female - Crisp, clear, friendly narrative tone
+        "en-IN-MadhurNeural",     # Male   - Natural, casual tone, sounds like a product reviewer
     ]
 
     selected_voice = random.choice(voice_pool)
     print(f"🎙️ [Voiceover Engine] Selected voice asset: {selected_voice}")
 
-    async def amain():
-        communicate = edge_tts.Communicate(text, selected_voice, rate="-8%")
-        await communicate.save(output_audio_path)
-        
-    try:
-        asyncio.run(amain())
-        print(f"🎙️ Voiceover successfully generated at: {output_audio_path}")
+    # 🚀 Step 1: Split text strictly at your custom '@' delimiter
+    if "@" in text:
+        hook, body = text.split("@", 1)
+    elif "||" in text:
+        hook, body = text.split("||", 1)
+    elif "." in text:
+        hook, body = text.split(".", 1)
+    else:
+        hook, body = text, ""
+
+    hook = hook.strip()
+    body = body.strip()
+
+    # Fallback if there is no secondary text body segment
+    if not body:
+        async def render_single():
+            communicate = edge_tts.Communicate(text, selected_voice, rate="-5%")
+            await communicate.save(output_audio_path)
+        asyncio.run(render_single())
         return True
+
+    # Define paths for the temporary split audio files
+    temp_hook_path = output_audio_path.replace(".mp3", "_hook_temp.mp3")
+    temp_body_path = output_audio_path.replace(".mp3", "_body_temp.mp3")
+
+    async def render_segments():
+        # ⚡ Hook segment: Spoken with higher urgency (+10% speech rate)
+        communicate_hook = edge_tts.Communicate(hook, selected_voice, rate="+20%", volume="+35%")
+        await communicate_hook.save(temp_hook_path)
+
+        # 🍃 Body segment: Spoken at a normal, smooth narrator pace (-6% speech rate)
+        communicate_body = edge_tts.Communicate(body, selected_voice, rate="-6%")
+        await communicate_body.save(temp_body_path)
+
+    try:
+        # Render the separate segments
+        asyncio.run(render_segments())
+
+        if os.path.exists(temp_hook_path) and os.path.exists(temp_body_path):
+            hook_clip = AudioFileClip(temp_hook_path)
+            body_clip = AudioFileClip(temp_body_path)
+
+            # 🔊 Amplify the hook clip by 45% using moviepy's native audio effects
+            hook_clip = hook_clip.volumex(1.45)
+
+            # Stitch them back together sequentially
+            from moviepy.editor import concatenate_audioclips
+            final_audio = concatenate_audioclips([hook_clip, body_clip])
+            final_audio.write_audiofile(output_audio_path, fps=44100, logger=None)
+
+            # Close file handles to allow system cleanup
+            hook_clip.close()
+            body_clip.close()
+            final_audio.close()
+
+            # Remove temporary clip segments
+            if os.path.exists(temp_hook_path): os.remove(temp_hook_path)
+            if os.path.exists(temp_body_path): os.remove(temp_body_path)
+            
+            print(f"🎙️ Success: Combined audio using your custom '@' delimiter splits!")
+            return True
+        else:
+            raise ValueError("Audio segment generation missing files.")
+
     except Exception as e:
-        print(f"❌ Voiceover generation failed: {e}")
-        return False
+        print(f"⚠️ Split rendering failed ({e}). Reverting to unified audio text layout...")
+        async def fallback_main():
+            clean_text = text.replace("@", "").replace("||", "")
+            communicate = edge_tts.Communicate(clean_text, selected_voice, rate="-5%")
+            await communicate.save(output_audio_path)
+        try:
+            asyncio.run(fallback_main())
+            return True
+        except Exception as final_err:
+            print(f"❌ Critical Audio Breakdown: {final_err}")
+            return False
 
 def get_wrapped_lines(text, max_w, font, font_scale, thickness):
     """

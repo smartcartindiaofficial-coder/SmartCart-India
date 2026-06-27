@@ -85,8 +85,8 @@ def reframe_product_for_youtube(raw_name, raw_specs):
         OUTPUT REGULATION: You must return exactly 3 lines of text. Do not add introductions, explanations, or markdown symbols like asterisks.
 
         Line 1: Punchy Viral Title (Max 5 words, clear, NO technical model numbers).
-        Line 2: Catchy Hook Sentence (0-3 seconds of the video, focuses on an everyday problem or high curiosity).
-        Line 3: Short Script Body (3-12 seconds of the video, highlights 2 major lifestyle benefits naturally).
+        Line 2: Catchy Hook Sentence (0-3 seconds of the video, focuses on an everyday problem or high curiosity, Max 10 words).
+        Line 3: Short Script Body (3-12 seconds of the video, highlights 2 major lifestyle benefits naturally, Min 10 and Max 15 words).
         """
 
         # Execute high-speed text inference using Llama 3
@@ -115,7 +115,8 @@ def reframe_product_for_youtube(raw_name, raw_specs):
             body = lines[2].replace("Line 3:", " ").strip()
             
             # Combine hook and body into a smooth audio text script for edge_tts to read
-            voiceover_script = f"{hook} {body}     Direct deal link is pinned in the comments below!"
+            voiceover_script_tmp = f"{hook} @ {body}     Direct deal link is pinned in the comments below!"
+            voiceover_script = re.sub(r'\d+\.\s*', '', voiceover_script_tmp)
             return viral_title, voiceover_script
         else:
             return raw_name[:45], "Check out this trending Amazon asset find right now!"
@@ -695,5 +696,5 @@ if __name__ == "__main__":
     cleanup_temp_files()
     start_daily_routine()    
     
-    # manual_url = "https://www.amazon.in/dp/B0DDX3RJ2R"
+    # manual_url = "https://www.amazon.in/dp/B0CZ8YG4GN"
     # run_manual_post(manual_url)
