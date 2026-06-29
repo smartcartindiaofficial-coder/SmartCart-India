@@ -158,15 +158,18 @@ def get_bestsellers(driver, count):
             asin = link.split("/dp/")[1].split("/")[0]
             
             driver.get(link)
+            time.sleep(30)
             driver.execute_script("window.scrollTo(0, 400);")
-            time.sleep(3)
+            time.sleep(30)
+            driver.execute_script("window.scrollTo(400, 800);")
+            time.sleep(30)
             driver.execute_script("window.scrollTo(0, 0);")
             time.sleep(30)
             
             img_paths = []
             try:
                 # 1. Broaden wait to accept both uppercase, lowercase, and list-item layouts
-                WebDriverWait(driver, 10).until(
+                WebDriverWait(driver, 60).until(
                     lambda d: d.find_elements(By.CSS_SELECTOR, "#altImages img") or 
                             d.find_elements(By.CSS_SELECTOR, "#altimages img")
                 )
@@ -177,8 +180,6 @@ def get_bestsellers(driver, count):
                 
             except Exception:
                 print("⏳ Timed out waiting for thumbnail containers. Attempting emergency fallback selector...")
-                # Emergency fallback: Try the main display images
-                thumbs = driver.find_elements(By.CSS_SELECTOR, "#landingImage, #imgBlkFront, .imgTagWrapper img")
             
             print(f"image count in thumbs variable: {len(thumbs)}")
 

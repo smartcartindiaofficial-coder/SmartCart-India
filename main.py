@@ -447,7 +447,7 @@ def start_daily_routine():
 
                 if not temp_images:
                     print("⚠️ Missing images for this selection. Retrying loop...")
-                    break # Breaks the inner loop, drops to finally, quits driver, and runs while loop again
+                    continue
 
                 # Let the loop know we found a valid product so we can terminate the while condition
                 product_found = True
