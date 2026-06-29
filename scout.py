@@ -158,18 +158,18 @@ def get_bestsellers(driver, count):
             asin = link.split("/dp/")[1].split("/")[0]
             
             driver.get(link)
-            time.sleep(30)
+            time.sleep(10)
             driver.execute_script("window.scrollTo(0, 400);")
-            time.sleep(30)
+            time.sleep(10)
             driver.execute_script("window.scrollTo(400, 800);")
-            time.sleep(30)
+            time.sleep(10)
             driver.execute_script("window.scrollTo(0, 0);")
-            time.sleep(30)
+            time.sleep(10)
             
             img_paths = []
             try:
                 # 1. Broaden wait to accept both uppercase, lowercase, and list-item layouts
-                WebDriverWait(driver, 60).until(
+                WebDriverWait(driver, 30).until(
                     lambda d: d.find_elements(By.CSS_SELECTOR, "#altImages img") or 
                             d.find_elements(By.CSS_SELECTOR, "#altimages img")
                 )
