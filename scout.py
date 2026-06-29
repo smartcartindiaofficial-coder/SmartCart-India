@@ -156,55 +156,85 @@ def get_bestsellers(driver, count):
 
             link = card.find_element(By.TAG_NAME, "a").get_attribute("href")
             asin = link.split("/dp/")[1].split("/")[0]
+
+            driver.set_window_size(1920, 1080)
             
             driver.get(link)
-            time.sleep(10)
-            driver.execute_script("window.scrollTo(0, 400);")
-            time.sleep(10)
-            driver.execute_script("window.scrollTo(400, 800);")
-            time.sleep(10)
+            time.sleep(3)
+            driver.execute_script("window.scrollTo(0, 350);")
+            time.sleep(2)
             driver.execute_script("window.scrollTo(0, 0);")
-            time.sleep(10)
+            time.sleep(2)
             
             img_paths = []
+            thumbs = []
             try:
-                # 1. Broaden wait to accept both uppercase, lowercase, and list-item layouts
-                WebDriverWait(driver, 30).until(
+                # Check if standard thumbnails exist within a reasonable 10s wait window
+                WebDriverWait(driver, 10).until(
                     lambda d: d.find_elements(By.CSS_SELECTOR, "#altImages img") or 
                             d.find_elements(By.CSS_SELECTOR, "#altimages img")
                 )
-                
-                # 2. Gather whichever thumbnail matches exist
                 thumbs = driver.find_elements(By.CSS_SELECTOR, "#altImages img, #altimages img")
-                print(f"✅ Successfully found thumbnail array. Elements located: {len(thumbs)}")
+                print(f"✅ Successfully found standard thumbnail grid. Elements: {len(thumbs)}")
                 
             except Exception:
-                print("⏳ Timed out waiting for thumbnail containers. Attempting emergency fallback selector...")
+                print("⏳ Standard thumbnail container missing (Anti-bot layout detected). Engaging emergency image grabber...")
+                # 🚀 Fix 3: Target the main display images, variant arrays, or main view panels directly
+                fallback_selectors = [
+                    "#landingImage", 
+                    "#imgBlkFront", 
+                    ".imgTagWrapper img", 
+                    "#main-image-container img",
+                    "img.main-image"
+                ]
+                for selector in fallback_selectors:
+                    elements = driver.find_elements(By.CSS_SELECTOR, selector)
+                    if elements:
+                        for el in elements:
+                            if el not in thumbs:
+                                thumbs.append(el)
+                print(f"🔮 Emergency grabber isolated {len(thumbs)} raw asset layout target targets.")
             
             print(f"image count in thumbs variable: {len(thumbs)}")
 
             found = 0
             for idx, img in enumerate(thumbs):
                 if found >= 7: break
-                if idx == 1: continue # Skip 2nd image
+            
+                # 1. Pull the element attributes
+                alt_text = (img.get_attribute("alt") or "").strip().lower()
+                src = img.get_attribute("data-old-hires") or img.get_attribute("src")
                 
-                src = img.get_attribute("src")
-                if src and "play-button" not in src:
-                    high_res = src.split(". _")[0] + ".jpg"
-                    if "._" in src:
-                        high_res = src.split("._")[0] + ".jpg"
+                if not src:
+                    continue
+
+                # 🚀 STRICT FILTER: Drop video cards based on explicit text values or thumbnail decorations
+                if "video" in alt_text:
+                    print(f"⏭️ Skipping element {idx}: Matched alt label '{img.get_attribute('alt')}'")
+                    continue
                     
-                    try:
-                        local_file = os.path.join(os.getcwd(), f"temp_{i}_{idx}.jpg")
-                        opener = urllib.request.build_opener()
-                        opener.addheaders = [('User-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')]
-                        urllib.request.install_opener(opener)                    
-                        urllib.request.urlretrieve(high_res, local_file)                    
-                        if os.path.getsize(local_file) > 1000: # Ensure it's a real valid image
-                            img_paths.append(local_file)
-                            found += 1
-                    except Exception as e:
-                        print(f"❌ Download failed: {e}")
+                if any(x in src for x in ["play-button", "gif", "inline-twister", "video-placeholder", "play-icon-overlay"]):
+                    print(f"⏭️ Skipping element {idx}: Detected video/interactive decoration string in URL")
+                    continue
+                                    
+                # 2. Convert thumbnail asset signature into clean, full-resolution image path
+                high_res = src
+                if "._S" in src:
+                    high_res = src.split("._S")[0] + ".jpg"
+                elif "._" in src:
+                    high_res = src.split("._")[0] + ".jpg"
+                    
+                try:
+                    local_file = os.path.join(os.getcwd(), f"temp_{i}_{idx}.jpg")
+                    opener = urllib.request.build_opener()
+                    opener.addheaders = [('User-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')]
+                    urllib.request.install_opener(opener)                    
+                    urllib.request.urlretrieve(high_res, local_file)                    
+                    if os.path.getsize(local_file) > 1000: # Ensure it's a real valid image
+                        img_paths.append(local_file)
+                        found += 1
+                except Exception as e:
+                    print(f"❌ Download failed: {e}")
             
             bullets = driver.find_elements(By.CSS_SELECTOR, "#feature-bullets ul li span, #pqv-feature-bullets ul li span")
             specs = " | ".join([b.text.strip() for b in bullets if len(b.text.strip()) > 10][:7])
