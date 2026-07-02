@@ -2,6 +2,7 @@ import time
 import urllib.request
 import os
 import random
+import re
 from selenium.webdriver.common.by import By
 from dotenv import load_dotenv
 
@@ -169,40 +170,27 @@ def get_bestsellers(driver, count):
             img_paths = []
             thumbs = []
 
-            image_selectors = [
-                "#altImages img", 
-                "#altimages img",
-                ".main-image-container img",
-                "#imageBlock img",
-                # Generic fallback: Look for any image inside a container that looks like a gallery/thumb wrapper
-                "[class*='thumb'] img",
-                "[id*='thumb'] img",
-                "[class*='gallery'] img"
-            ]
+            page_source = driver.page_source
 
-            # Combine selectors into one large comma-separated string for Selenium
+            if "api-services-support@amazon.com" in page_source or "captcha" in page_source.lower():
+                print("🚨 ALERT: Hit Amazon CAPTCHA / Robot Check page! Images cannot be accessed.")
+                # Optional: driver.save_screenshot("captcha_triggered.png")
+
+            image_selectors = [
+                "#altImages img", "#altimages img", "#imageBlock img",
+                "[class*='thumb'] img", "[id*='thumb'] img", "[class*='gallery'] img"
+            ]
             combined_selector = ", ".join(image_selectors)
 
             print("⏳ Waiting for any valid thumbnail layout to appear...")
 
             try:
-                # 1. Wait until the elements exist AND at least some of them have loaded actual image URLs
-                WebDriverWait(driver, 12).until(
-                    lambda d: [
-                        img for img in d.find_elements(By.CSS_SELECTOR, combined_selector)
-                        if img.get_attribute("src") 
-                        and not img.get_attribute("src").startswith("data:image/gif")
-                        and img.is_displayed() # Make sure it's actually visible on screen
-                    ]
-                ) 
-                # 2. Extract all matching thumbnails
+                WebDriverWait(driver, 5).until(
+                    lambda d: [img for img in d.find_elements(By.CSS_SELECTOR, combined_selector) 
+                            if img.get_attribute("src") and not img.get_attribute("src").startswith("data:image")]
+                )
                 all_found = driver.find_elements(By.CSS_SELECTOR, combined_selector)
-
-                # 3. Filter out layout spacer gifs or tracking pixels
-                thumbs = [
-                    img for img in all_found 
-                    if img.get_attribute("src") and "sprite" not in img.get_attribute("src").lower()
-                ]
+                thumbs = [img for img in all_found if img.is_displayed()]
                 
                 print(f"✅ Successfully found standard thumbnail grid with loaded images. Elements: {len(thumbs)}")   
             except Exception:
@@ -222,6 +210,26 @@ def get_bestsellers(driver, count):
                             if el not in thumbs:
                                 thumbs.append(el)
                 print(f"🔮 Emergency grabber isolated {len(thumbs)} raw asset layout target targets.")
+
+            if not thumbs:
+                print("🔮 Running emergency page-source extraction...")
+                
+                # Amazon encodes image arrays inside Javascript blocks (e.g., 'initial': [ {hiRes: "url", large: "url"} ])
+                # This regex sweeps the page text for high-res JPEG/PNG URLs inside those scripts
+                found_urls = re.findall(r'https://images-[^"\']+\.(?:jpg|jpeg|png)', page_source)
+                
+                # Filter out common UI icons/sprites to keep only product assets
+                product_images = [url for url in set(found_urls) if "images/I/" in url and not url.endswith(".gif")]
+                
+                if product_images:
+                    print(f"🎯 Regex successfully bypassed DOM block! Extracted {len(product_images)} image URLs.")
+                    # Mocking element structure so your downstream code doesn't break
+                    class MockImageElement:
+                        def __init__(self, url): self.url = url
+                        def get_attribute(self, attr): return self.url if attr == 'src' else ''
+                        def is_displayed(self): return True
+
+                    thumbs = [MockImageElement(url) for url in product_images[:10]] # Limit to top 10
             
             print(f"image count in thumbs variable: {len(thumbs)}")
 
