@@ -429,11 +429,7 @@ def start_daily_routine():
                 driver.quit()
                 continue
             
-            product_count_env = os.getenv("Product_Count")
-            product_count = int(product_count_env) if product_count_env else 1
-            products_found = new_products[:product_count]  
-
-            for i, item in enumerate(products_found):
+            for i, item in enumerate(new_products):
                 print(f"✨ Found new product: {item['name'][:50]}...")
                 asin = item.get('asin')
 
@@ -446,7 +442,7 @@ def start_daily_routine():
                 temp_images = item.get('images', [])
 
                 if not temp_images:
-                    print("⚠️ Missing images for this selection. Retrying loop...")
+                    print("⚠️ Missing images for this selection. Retrying loop...{i}")
                     continue
 
                 # Let the loop know we found a valid product so we can terminate the while condition
@@ -509,6 +505,9 @@ def start_daily_routine():
                     asin=asin, name=viral_title, product_url=product_url,
                     local_image_path=primary_thumbnail, price=item.get('price', 'Check Price')
                 )
+
+                print("✅ Successfully processed one product. Exiting pool loop.")
+                break
                 
         finally:
             driver.quit()
