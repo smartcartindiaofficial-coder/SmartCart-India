@@ -168,20 +168,42 @@ def get_bestsellers(driver, count):
             
             img_paths = []
             thumbs = []
+
+            image_selectors = [
+                "#altImages img", 
+                "#altimages img",
+                ".main-image-container img",
+                "#imageBlock img",
+                # Generic fallback: Look for any image inside a container that looks like a gallery/thumb wrapper
+                "[class*='thumb'] img",
+                "[id*='thumb'] img",
+                "[class*='gallery'] img"
+            ]
+
+            # Combine selectors into one large comma-separated string for Selenium
+            combined_selector = ", ".join(image_selectors)
+
+            print("⏳ Waiting for any valid thumbnail layout to appear...")
+
             try:
                 # 1. Wait until the elements exist AND at least some of them have loaded actual image URLs
-                WebDriverWait(driver, 10).until(
+                WebDriverWait(driver, 12).until(
                     lambda d: [
-                        img for img in (
-                            d.find_elements(By.CSS_SELECTOR, "#altImages img") + 
-                            d.find_elements(By.CSS_SELECTOR, "#altimages img")
-                        )
-                        # Ensure the src attribute exists, is not empty, and isn't just a tiny transparent placeholder/data URI
-                        if img.get_attribute("src") and not img.get_attribute("src").startswith("data:image/gif")
+                        img for img in d.find_elements(By.CSS_SELECTOR, combined_selector)
+                        if img.get_attribute("src") 
+                        and not img.get_attribute("src").startswith("data:image/gif")
+                        and img.is_displayed() # Make sure it's actually visible on screen
                     ]
-                )                
-                # 2. Safely grab the elements now that we know they have content
-                thumbs = driver.find_elements(By.CSS_SELECTOR, "#altImages img, #altimages img")
+                ) 
+                # 2. Extract all matching thumbnails
+                all_found = driver.find_elements(By.CSS_SELECTOR, combined_selector)
+
+                # 3. Filter out layout spacer gifs or tracking pixels
+                thumbs = [
+                    img for img in all_found 
+                    if img.get_attribute("src") and "sprite" not in img.get_attribute("src").lower()
+                ]
+                
                 print(f"✅ Successfully found standard thumbnail grid with loaded images. Elements: {len(thumbs)}")   
             except Exception:
                 print("⏳ Standard thumbnail container missing (Anti-bot layout detected). Engaging emergency image grabber...")
