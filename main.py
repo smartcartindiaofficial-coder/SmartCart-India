@@ -588,11 +588,6 @@ def run_manual_post(url):
         # 5. CREATE VIDEO 
         print(f"🎬 Generating Manual Video for: {safe_name[:30]}")
 
-        # --- 🎙️ GENERATING THE NARRATION SCRIPT FOR THE VOICEOVER ---
-        # Extract first 2 bullet points from specifications for a clean, short audio loop
-        # clean_specs_list = [s.strip() for s in specs.split('\n-') if s.strip()]
-        # short_specs_summary = " ".join(clean_specs_list[:2])
-        
         viral_title, viral_voiceover_script = reframe_product_for_youtube(safe_name, specs)
         
         # Construct a high-retention narration voice hook
@@ -694,8 +689,7 @@ def run_manual_post(url):
         
 
 if __name__ == "__main__":
-    cleanup_temp_files()
     start_daily_routine()    
     
-    # manual_url = "https://www.amazon.in/dp/B0CZ8YG4GN"
+    # manual_url = "https://www.amazon.in/dp/B0DNQB125G"
     # run_manual_post(manual_url)
