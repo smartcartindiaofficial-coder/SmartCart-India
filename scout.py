@@ -169,44 +169,74 @@ def get_bestsellers(driver, count):
             time.sleep(2)
             
             img_paths = []
+            high_res_urls = []
             thumbs = []
 
             try:
-                # Extract the script tag containing the high-res image window mapping
-                page_source = driver.page_source
-                # This regex looks for Amazon's native image array mapping
-                image_data_match = re.search(r'\'initial\':\s*({.+?})', page_source)
+                # Target the main product display image
+                main_img = driver.find_element(By.ID, "landingImage")
+                dyn_img_attr = main_img.get_attribute("data-a-dynamic-image")
                 
-                if image_data_match:
-                    image_json = json.loads(image_data_match.group(1))
-                    # This gives you a clean list of all high-resolution images directly
-                    high_res_urls = [img_item.get('hiRes') or img_item.get('large') for img_item in image_json.values() if img_item]
-                    # Filter out None values
-                    high_res_urls = [url for url in high_res_urls if url]
-                    
-                    print(f"🔮 Found {len(high_res_urls)} clean assets via internal JSON parsing.")
-                    
-                    found = 0
-                    for idx, high_res in enumerate(high_res_urls):
-                        if found >= 7: break
-                        
-                        try:
-                            local_file = os.path.join(os.getcwd(), f"temp_{i}_{idx}.jpg")
-                            
-                            # Use Selenium's network layer or a robust request scheme 
-                            # (See Fix 2 for downloading safely)
-                            opener = urllib.request.build_opener()
-                            opener.addheaders = [('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')]
-                            urllib.request.install_opener(opener)
-                            
-                            urllib.request.urlretrieve(high_res, local_file)
-                            if os.path.getsize(local_file) > 1000:
-                                img_paths.append(local_file)
-                                found += 1
-                        except Exception as e:
-                            print(f"❌ Download failed for URL {high_res}: {e}")
+                if dyn_img_attr:
+                    # data-a-dynamic-image contains a JSON string like: {"URL_1": [width, height], "URL_2": [...]}
+                    dyn_data = json.loads(dyn_img_attr)
+                    # Sort or pick keys (which are the image URLs)
+                    high_res_urls = list(dyn_data.keys())
+                    print(f"📸 Strategy 1: Extracted {len(high_res_urls)} assets from landingImage dynamic matrix.")
             except Exception as e:
-                print(f"Fallback to standard selectors due to: {e}")
+                print(f"⚠️ Strategy 1 failed or bypassed: {e}")
+
+            # --- STRATEGY 2: Inline Script JSON Parser Fallback ---
+            if not high_res_urls:
+                try:
+                    page_source = driver.page_source
+                    image_data_match = re.search(r'\'colorImages\':\s*\{\s*\'initial\':\s*(\[.+?\])', page_source)
+                    if image_data_match:
+                        image_json = json.loads(image_data_match.group(1))
+                        high_res_urls = [img.get('hiRes') or img.get('large') for img in image_json if img]
+                        high_res_urls = [url for url in high_res_urls if url]
+                        print(f"📸 Strategy 2: Extracted {len(high_res_urls)} assets via inline layout script.")
+                except Exception as e:
+                    print(f"⚠️ Strategy 2 failed: {e}")
+
+            # --- STRATEGY 3: Alt Thumbnails Raw Scraping (Final Fallback) ---
+            if not high_res_urls:
+                try:
+                    thumbs = driver.find_elements(By.CSS_SELECTOR, "#altImages img, #altimages img, .imgTagWrapper img")
+                    for img in thumbs:
+                        src = img.get_attribute("data-old-hires") or img.get_attribute("src")
+                        if src and not src.startswith("data:"):
+                            # Normalize low-res thumbnail links to full resolution
+                            clean_url = re.sub(r'\._[A-Z0-9_-]+\.', '.', src)
+                            if clean_url not in high_res_urls:
+                                high_res_urls.append(clean_url)
+                    print(f"📸 Strategy 3: Collected {len(high_res_urls)} raw asset paths from visible tags.")
+                except Exception as e:
+                    print(f"⚠️ Strategy 3 failed: {e}")
+
+            # --- DOWNLOAD PROCESSOR ---
+            found = 0
+            for idx, high_res in enumerate(high_res_urls):
+                if found >= 7: break
+                
+                # Filter out obvious utility/video files
+                if any(x in high_res.lower() for x in ["video", "play-button", "gif", "icon"]):
+                    continue
+                    
+                try:
+                    local_file = os.path.join(os.getcwd(), f"temp_{i}_{idx}.jpg")
+                    
+                    # Spoof headers clearly to match your Selenium session profile
+                    opener = urllib.request.build_opener()
+                    opener.addheaders = [('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')]
+                    urllib.request.install_opener(opener)
+                    
+                    urllib.request.urlretrieve(high_res, local_file)
+                    if os.path.getsize(local_file) > 1000:
+                        img_paths.append(local_file)
+                        found += 1
+                except Exception as e:
+                    print(f"❌ Download failed for {high_res}: {e}")
             # try:
             #     # 1. Wait until the elements exist AND at least some of them have loaded actual image URLs
             #     WebDriverWait(driver, 10).until(
@@ -284,6 +314,8 @@ def get_bestsellers(driver, count):
             bullets = driver.find_elements(By.CSS_SELECTOR, "#feature-bullets ul li span, #pqv-feature-bullets ul li span")
             specs = " | ".join([b.text.strip() for b in bullets if len(b.text.strip()) > 10][:7])
             
+            print(f"bullets variable: {bullets}")
+            print(f"specs variable: {specs}")
             print(f"image count in img_paths variable: {len(img_paths)}")
 
             products.append({
