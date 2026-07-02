@@ -2,6 +2,7 @@ import time
 import urllib.request
 import os
 import random
+import json
 import re
 from selenium.webdriver.common.by import By
 from dotenv import load_dotenv
@@ -170,107 +171,115 @@ def get_bestsellers(driver, count):
             img_paths = []
             thumbs = []
 
-            page_source = driver.page_source
-
-            if "api-services-support@amazon.com" in page_source or "captcha" in page_source.lower():
-                print("🚨 ALERT: Hit Amazon CAPTCHA / Robot Check page! Images cannot be accessed.")
-                # Optional: driver.save_screenshot("captcha_triggered.png")
-
-            image_selectors = [
-                "#altImages img", "#altimages img", "#imageBlock img",
-                "[class*='thumb'] img", "[id*='thumb'] img", "[class*='gallery'] img"
-            ]
-            combined_selector = ", ".join(image_selectors)
-
-            print("⏳ Waiting for any valid thumbnail layout to appear...")
-
             try:
-                WebDriverWait(driver, 5).until(
-                    lambda d: [img for img in d.find_elements(By.CSS_SELECTOR, combined_selector) 
-                            if img.get_attribute("src") and not img.get_attribute("src").startswith("data:image")]
-                )
-                all_found = driver.find_elements(By.CSS_SELECTOR, combined_selector)
-                thumbs = [img for img in all_found if img.is_displayed()]
+                # Extract the script tag containing the high-res image window mapping
+                page_source = driver.page_source
+                # This regex looks for Amazon's native image array mapping
+                image_data_match = re.search(r'\'initial\':\s*({.+?})', page_source)
                 
-                print(f"✅ Successfully found standard thumbnail grid with loaded images. Elements: {len(thumbs)}")   
-            except Exception:
-                print("⏳ Standard thumbnail container missing (Anti-bot layout detected). Engaging emergency image grabber...")
-                # 🚀 Fix 3: Target the main display images, variant arrays, or main view panels directly
-                fallback_selectors = [
-                    "#landingImage", 
-                    "#imgBlkFront", 
-                    ".imgTagWrapper img", 
-                    "#main-image-container img",
-                    "img.main-image"
-                ]
-                for selector in fallback_selectors:
-                    elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                    if elements:
-                        for el in elements:
-                            if el not in thumbs:
-                                thumbs.append(el)
-                print(f"🔮 Emergency grabber isolated {len(thumbs)} raw asset layout target targets.")
-
-            if not thumbs:
-                print("🔮 Running emergency page-source extraction...")
-                
-                # Amazon encodes image arrays inside Javascript blocks (e.g., 'initial': [ {hiRes: "url", large: "url"} ])
-                # This regex sweeps the page text for high-res JPEG/PNG URLs inside those scripts
-                found_urls = re.findall(r'https://images-[^"\']+\.(?:jpg|jpeg|png)', page_source)
-                
-                # Filter out common UI icons/sprites to keep only product assets
-                product_images = [url for url in set(found_urls) if "images/I/" in url and not url.endswith(".gif")]
-                
-                if product_images:
-                    print(f"🎯 Regex successfully bypassed DOM block! Extracted {len(product_images)} image URLs.")
-                    # Mocking element structure so your downstream code doesn't break
-                    class MockImageElement:
-                        def __init__(self, url): self.url = url
-                        def get_attribute(self, attr): return self.url if attr == 'src' else ''
-                        def is_displayed(self): return True
-
-                    thumbs = [MockImageElement(url) for url in product_images[:10]] # Limit to top 10
-            
-            print(f"image count in thumbs variable: {len(thumbs)}")
-
-            found = 0
-            for idx, img in enumerate(thumbs):
-                if found >= 7: break
-            
-                # 1. Pull the element attributes
-                alt_text = (img.get_attribute("alt") or "").strip().lower()
-                src = img.get_attribute("data-old-hires") or img.get_attribute("src")
-                
-                if not src:
-                    continue
-
-                # 🚀 STRICT FILTER: Drop video cards based on explicit text values or thumbnail decorations
-                if "video" in alt_text:
-                    print(f"⏭️ Skipping element {idx}: Matched alt label '{img.get_attribute('alt')}'")
-                    continue
+                if image_data_match:
+                    image_json = json.loads(image_data_match.group(1))
+                    # This gives you a clean list of all high-resolution images directly
+                    high_res_urls = [img_item.get('hiRes') or img_item.get('large') for img_item in image_json.values() if img_item]
+                    # Filter out None values
+                    high_res_urls = [url for url in high_res_urls if url]
                     
-                if any(x in src for x in ["play-button", "gif", "inline-twister", "video-placeholder", "play-icon-overlay"]):
-                    print(f"⏭️ Skipping element {idx}: Detected video/interactive decoration string in URL")
-                    continue
+                    print(f"🔮 Found {len(high_res_urls)} clean assets via internal JSON parsing.")
+                    
+                    found = 0
+                    for idx, high_res in enumerate(high_res_urls):
+                        if found >= 7: break
+                        
+                        try:
+                            local_file = os.path.join(os.getcwd(), f"temp_{i}_{idx}.jpg")
+                            
+                            # Use Selenium's network layer or a robust request scheme 
+                            # (See Fix 2 for downloading safely)
+                            opener = urllib.request.build_opener()
+                            opener.addheaders = [('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')]
+                            urllib.request.install_opener(opener)
+                            
+                            urllib.request.urlretrieve(high_res, local_file)
+                            if os.path.getsize(local_file) > 1000:
+                                img_paths.append(local_file)
+                                found += 1
+                        except Exception as e:
+                            print(f"❌ Download failed for URL {high_res}: {e}")
+            except Exception as e:
+                print(f"Fallback to standard selectors due to: {e}")
+            # try:
+            #     # 1. Wait until the elements exist AND at least some of them have loaded actual image URLs
+            #     WebDriverWait(driver, 10).until(
+            #         lambda d: [
+            #             img for img in (
+            #                 d.find_elements(By.CSS_SELECTOR, "#altImages img") + 
+            #                 d.find_elements(By.CSS_SELECTOR, "#altimages img")
+            #             )
+            #             # Ensure the src attribute exists, is not empty, and isn't just a tiny transparent placeholder/data URI
+            #             if img.get_attribute("src") and not img.get_attribute("src").startswith("data:image/gif")
+            #         ]
+            #     )                
+            #     # 2. Safely grab the elements now that we know they have content
+            #     thumbs = driver.find_elements(By.CSS_SELECTOR, "#altImages img, #altimages img")
+            #     print(f"✅ Successfully found standard thumbnail grid with loaded images. Elements: {len(thumbs)}")   
+            # except Exception:
+            #     print("⏳ Standard thumbnail container missing (Anti-bot layout detected). Engaging emergency image grabber...")
+            #     # 🚀 Fix 3: Target the main display images, variant arrays, or main view panels directly
+            #     fallback_selectors = [
+            #         "#landingImage", 
+            #         "#imgBlkFront", 
+            #         ".imgTagWrapper img", 
+            #         "#main-image-container img",
+            #         "img.main-image"
+            #     ]
+            #     for selector in fallback_selectors:
+            #         elements = driver.find_elements(By.CSS_SELECTOR, selector)
+            #         if elements:
+            #             for el in elements:
+            #                 if el not in thumbs:
+            #                     thumbs.append(el)
+            #     print(f"🔮 Emergency grabber isolated {len(thumbs)} raw asset layout target targets.")
+            
+            # print(f"image count in thumbs variable: {len(thumbs)}")
+
+            # found = 0
+            # for idx, img in enumerate(thumbs):
+            #     if found >= 7: break
+            
+            #     # 1. Pull the element attributes
+            #     alt_text = (img.get_attribute("alt") or "").strip().lower()
+            #     src = img.get_attribute("data-old-hires") or img.get_attribute("src")
+                
+            #     if not src:
+            #         continue
+
+            #     # 🚀 STRICT FILTER: Drop video cards based on explicit text values or thumbnail decorations
+            #     if "video" in alt_text:
+            #         print(f"⏭️ Skipping element {idx}: Matched alt label '{img.get_attribute('alt')}'")
+            #         continue
+                    
+            #     if any(x in src for x in ["play-button", "gif", "inline-twister", "video-placeholder", "play-icon-overlay"]):
+            #         print(f"⏭️ Skipping element {idx}: Detected video/interactive decoration string in URL")
+            #         continue
                                     
-                # 2. Convert thumbnail asset signature into clean, full-resolution image path
-                high_res = src
-                if "._S" in src:
-                    high_res = src.split("._S")[0] + ".jpg"
-                elif "._" in src:
-                    high_res = src.split("._")[0] + ".jpg"
+            #     # 2. Convert thumbnail asset signature into clean, full-resolution image path
+            #     high_res = src
+            #     if "._S" in src:
+            #         high_res = src.split("._S")[0] + ".jpg"
+            #     elif "._" in src:
+            #         high_res = src.split("._")[0] + ".jpg"
                     
-                try:
-                    local_file = os.path.join(os.getcwd(), f"temp_{i}_{idx}.jpg")
-                    opener = urllib.request.build_opener()
-                    opener.addheaders = [('User-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')]
-                    urllib.request.install_opener(opener)                    
-                    urllib.request.urlretrieve(high_res, local_file)                    
-                    if os.path.getsize(local_file) > 1000: # Ensure it's a real valid image
-                        img_paths.append(local_file)
-                        found += 1
-                except Exception as e:
-                    print(f"❌ Download failed: {e}")
+            #     try:
+            #         local_file = os.path.join(os.getcwd(), f"temp_{i}_{idx}.jpg")
+            #         opener = urllib.request.build_opener()
+            #         opener.addheaders = [('User-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')]
+            #         urllib.request.install_opener(opener)                    
+            #         urllib.request.urlretrieve(high_res, local_file)                    
+            #         if os.path.getsize(local_file) > 1000: # Ensure it's a real valid image
+            #             img_paths.append(local_file)
+            #             found += 1
+            #     except Exception as e:
+            #         print(f"❌ Download failed: {e}")
             
             bullets = driver.find_elements(By.CSS_SELECTOR, "#feature-bullets ul li span, #pqv-feature-bullets ul li span")
             specs = " | ".join([b.text.strip() for b in bullets if len(b.text.strip()) > 10][:7])
