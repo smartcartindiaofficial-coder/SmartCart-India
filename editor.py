@@ -19,7 +19,7 @@ def generate_voiceover(text, output_audio_path):
         "en-US-GuyNeural",      # Natural US English (Male)
         "en-US-AriaNeural",     # Natural US English (Female)
         "en-GB-RyanNeural",     # Professional UK English (Male)
-        "en-GB-SoniaNeural"     # Professional UK English (Female)
+        "en-GB-SoniaNeural",     # Professional UK English (Female)
         "en-IN-KavyaNeural",      # Female - Natural conversational tone, very popular
         "en-IN-AnanyaNeural",     # Female - Crisp, clear, friendly narrative tone
         "en-IN-MadhurNeural",     # Male   - Natural, casual tone, sounds like a product reviewer
