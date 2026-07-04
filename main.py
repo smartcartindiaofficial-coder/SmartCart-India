@@ -489,8 +489,11 @@ def start_daily_routine():
 
                 description_text = (
                     f"📦 {viral_title}\n\nBuy Link: {product_url}\n\n"
-                    "#(ad) As an Amazon Associate I earn from qualifying purchases.\n"
-                    f"{hashtag_string_block}"
+                    "website: https://smartcartindiaofficial-coder.github.io/SmartCart-India/ \n"
+                    "Instagram: https://www.instagram.com/smartcartindiaofficial\n"
+                    "YouTube: https://www.youtube.com/@SmartCartIndiaOfficial\n"
+                    "Telegram: t.me/smartCartIndiaOfficial\n"
+                    "#(ad) As an Amazon Associate I earn from qualifying purchases."
                 )
                 
                 desc_path = os.path.join(folder, "description.txt")
@@ -640,11 +643,12 @@ def run_manual_post(url):
 
         # 6. SAVE DESCRIPTION FILE (Loaded with contextual optimization strings)
         description_text = (
-            f"📦 {safe_name}\n\n"
-            #f"Features:\n-{specs}\n\n"        
-            f"Buy Link: {product_url}\n\n"
-            "#(ad) As an Amazon Associate I earn from qualifying purchases.\n"
-            f"{hashtag_string_block}" # Placed perfectly at the baseline footer
+            f"📦 {viral_title}\n\nBuy Link: {product_url}\n\n"
+            "website: https://smartcartindiaofficial-coder.github.io/SmartCart-India/ \n"
+            "Instagram: https://www.instagram.com/smartcartindiaofficial\n"
+            "YouTube: https://www.youtube.com/@SmartCartIndiaOfficial\n"
+            "Telegram: t.me/smartCartIndiaOfficial\n"
+            "#(ad) As an Amazon Associate I earn from qualifying purchases."
         )
         
         desc_path = os.path.join(folder, "description.txt")
