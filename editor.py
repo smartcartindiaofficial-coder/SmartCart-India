@@ -38,8 +38,8 @@ def generate_voiceover(text, output_audio_path):
     else:
         hook, body = text, ""
 
-    hook = hook.strip()
-    body = body.strip()
+    hook = hook.strip().replace('"', '').replace('\'', '')
+    body = body.strip().replace('"', '').replace('\'', '')
 
     # Fallback if there is no secondary text body segment
     if not body:
@@ -55,8 +55,10 @@ def generate_voiceover(text, output_audio_path):
 
     async def render_segments():
         # ⚡ Hook segment: Spoken with higher urgency (+10% speech rate)
-        communicate_hook = edge_tts.Communicate(hook, selected_voice, rate="+20%", volume="+35%")
+        communicate_hook = edge_tts.Communicate(hook, selected_voice, rate="+20%", volume="+35%",proxy="http://your_residential_proxy_ip:port")
         await communicate_hook.save(temp_hook_path)
+
+        await asyncio.sleep(1.5)
 
         # 🍃 Body segment: Spoken at a normal, smooth narrator pace (-6% speech rate)
         communicate_body = edge_tts.Communicate(body, selected_voice, rate="-6%")
