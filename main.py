@@ -684,10 +684,10 @@ def run_manual_post(url):
         youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
 
         # Pass that exact youtube_url string into your updated uploader module!
-        insta_uploader.upload_to_instagram(video_path, description_text, product_url)
+        insta_uploader.upload_to_instagram(video_path, description_text, '')
 
         # # Telegram (Funnel the captured YouTube URL string directly into our layout parameter)
-        telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url = product_url)
+        telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url = youtube_url)
 
         # 8. RECORD HISTORY
         record_upload(product['asin'], viral_title)
@@ -723,7 +723,7 @@ if __name__ == "__main__":
     else:
         print("Running inside GitHub Actions pipeline. Skipping git pull.")
 
-    # start_daily_routine()    
+    start_daily_routine()    
     
-    manual_url = "https://www.amazon.in/dp/B0FJG1V6RJ"
-    run_manual_post(manual_url)
+    # manual_url = "https://www.amazon.in/dp/B0FJG1V6RJ"
+    # run_manual_post(manual_url)
