@@ -407,12 +407,13 @@ def start_daily_routine():
             options.add_argument("--disable-gpu")
             driver = webdriver.Chrome(options=options)
         else:
-            print("💻 Local Environment Detected: Launching Local Brave Instance...")
-            if BRAVE_PATH:
-                options.binary_location = BRAVE_PATH
-            if BRAVE_USER_DATA:
-                options.add_argument(f"--user-data-dir={BRAVE_USER_DATA}")
-            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+            print("💻 Local Environment Detected: Testing with standard Google Chrome Instance...")
+            
+            options.add_argument("--remote-debugging-port=9222")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            
+            driver = webdriver.Chrome(options=options)
         
         try:
             pool_size_env = os.getenv("pool_size")
@@ -500,17 +501,17 @@ def start_daily_routine():
                 with open(desc_path, "w", encoding="utf-8") as f:
                     f.write(description_text)
 
-                youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
-                insta_uploader.upload_to_instagram(video_path, description_text, product_url)
-                telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)                
+                # youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
+                # insta_uploader.upload_to_instagram(video_path, description_text, product_url)
+                # telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)                
 
-                record_upload(asin, viral_title)
+                # record_upload(asin, viral_title)
 
-                primary_thumbnail = final_images[0] if final_images else ""
-                compile_landing_page(
-                    asin=asin, name=viral_title, product_url=product_url,
-                    local_image_path=primary_thumbnail, price=item.get('price', 'Check Price')
-                )
+                # primary_thumbnail = final_images[0] if final_images else ""
+                # compile_landing_page(
+                #     asin=asin, name=viral_title, product_url=product_url,
+                #     local_image_path=primary_thumbnail, price=item.get('price', 'Check Price')
+                # )
 
                 print("✅ Successfully processed one product. Exiting pool loop.")
                 break
@@ -534,13 +535,23 @@ def run_manual_post(url):
     time.sleep(2)
 
     options = webdriver.ChromeOptions()
-    options.binary_location = BRAVE_PATH
-    options.add_argument(f"--user-data-dir={BRAVE_USER_DATA}")
-    options.add_argument(r'--profile-directory=Default')
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        print("🌐 Cloud Environment Detected: Configuring Headless Chromium...")
+        options.add_argument("--headless=new")
+        options.add_argument('--window-size=1920,1080')
+        options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        driver = webdriver.Chrome(options=options)
+    else:
+        print("💻 Local Environment Detected: Testing with standard Google Chrome Instance...")
+        
+        options.add_argument("--remote-debugging-port=9222")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        
+        driver = webdriver.Chrome(options=options)
     
     try:
         # 1. Scrape the data
@@ -658,34 +669,34 @@ def run_manual_post(url):
         # 7. POST TO PLATFORMS        
         # YouTube (API Method - Returns YouTube Link String)
         tags = "amazon, deals, india, gadget"
-        youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
+        # youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
 
-        # Pass that exact youtube_url string into your updated uploader module!
-        insta_uploader.upload_to_instagram(video_path, description_text)
+        # # Pass that exact youtube_url string into your updated uploader module!
+        # insta_uploader.upload_to_instagram(video_path, description_text)
 
-        # # Telegram (Funnel the captured YouTube URL string directly into our layout parameter)
-        telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url = '')
+        # # # Telegram (Funnel the captured YouTube URL string directly into our layout parameter)
+        # telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url = '')
 
-        # 8. RECORD HISTORY
-        record_upload(product['asin'], viral_title)
-        print(f"✅ Manual Post Complete: {product['asin']}")
+        # # 8. RECORD HISTORY
+        # record_upload(product['asin'], viral_title)
+        # print(f"✅ Manual Post Complete: {product['asin']}")
 
-        # --- 🌐 NEW LANDING PAGE INTEGRATION LOOP STEP ---
-        # Fallback cascade to find whatever valid image string your scraper collected
-        primary_thumbnail = ""
-        if archived_images and len(archived_images) > 0:
-            primary_thumbnail = archived_images[0] # Points to folder/img_0.jpg
+        # # --- 🌐 NEW LANDING PAGE INTEGRATION LOOP STEP ---
+        # # Fallback cascade to find whatever valid image string your scraper collected
+        # primary_thumbnail = ""
+        # if archived_images and len(archived_images) > 0:
+        #     primary_thumbnail = archived_images[0] # Points to folder/img_0.jpg
         
-        compile_landing_page(
-            asin=product['asin'],
-            name=viral_title,
-            product_url=product_url,
-            local_image_path=primary_thumbnail, # Passing the local file path
-            price=product.get('price', 'Check Price')
-        )
+        # compile_landing_page(
+        #     asin=product['asin'],
+        #     name=viral_title,
+        #     product_url=product_url,
+        #     local_image_path=primary_thumbnail, # Passing the local file path
+        #     price=product.get('price', 'Check Price')
+        # )
 
-        # 🚀 NEW: PUSH UPDATES LIVE TO GITHUB PAGES
-        sync_landing_page_to_github()
+        # # 🚀 NEW: PUSH UPDATES LIVE TO GITHUB PAGES
+        # sync_landing_page_to_github()
 
     finally:  
         driver.quit()
@@ -694,7 +705,7 @@ def run_manual_post(url):
         
 
 if __name__ == "__main__":
-    start_daily_routine()    
+    # start_daily_routine()    
     
-    # manual_url = "https://www.amazon.in/dp/B0DNQB125G"
-    # run_manual_post(manual_url)
+    manual_url = "https://www.amazon.in/dp/B0C8JPGMGM"
+    run_manual_post(manual_url)

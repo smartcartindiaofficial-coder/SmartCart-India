@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import asyncio
 import edge_tts
+import nest_asyncio
 
 try:
     # Try importing using the newer MoviePy v2.x structure
@@ -55,7 +56,7 @@ def generate_voiceover(text, output_audio_path):
 
     async def render_segments():
         # ⚡ Hook segment: Spoken with higher urgency (+10% speech rate)
-        communicate_hook = edge_tts.Communicate(hook, selected_voice, rate="+20%", volume="+35%",proxy="http://your_residential_proxy_ip:port")
+        communicate_hook = edge_tts.Communicate(hook, selected_voice, rate="+20%", volume="+35%")
         await communicate_hook.save(temp_hook_path)
 
         await asyncio.sleep(1.5)
@@ -95,12 +96,18 @@ def generate_voiceover(text, output_audio_path):
             raise ValueError("Audio segment generation missing files.")
 
     except Exception as e:
+        
         print(f"⚠️ Split rendering failed ({e}). Reverting to unified audio text layout...")
         async def fallback_main():
             clean_text = text.replace("@", "").replace("||", "")
             communicate = edge_tts.Communicate(clean_text, selected_voice, rate="-5%")
             await communicate.save(output_audio_path)
         try:
+            
+            # Check if an event loop is already running to avoid nested loop crashes
+            loop = asyncio.get_event_loop()
+            if loop.is_running():                
+                nest_asyncio.apply()
             asyncio.run(fallback_main())
             return True
         except Exception as final_err:
