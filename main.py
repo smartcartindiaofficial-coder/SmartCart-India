@@ -383,6 +383,23 @@ def get_uploaded_asins():
     except Exception as e:
         print(f"⚠️ Could not read history: {e}")
         return set()
+    
+def pull_latest_changes():
+    """Attempts to pull the latest changes from the remote repository."""
+    print("Local environment detected. Checking for remote updates...")
+    try:
+        # Runs 'git pull origin main' (adjust branch name if yours is different)
+        result = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        print("Git Pull Output:\n", result.stdout)
+    except subprocess.CalledProcessError as e:
+        print(f"Error during git pull: {e.stderr}", file=sys.stderr)
+        # Optional: Decide if you want to exit if a merge conflict happens during auto-pull
+        # sys.exit(1)
 
 def start_daily_routine():
     product_found = False
@@ -701,6 +718,12 @@ def run_manual_post(url):
         
 
 if __name__ == "__main__":
+    is_github_pipeline = os.environ.get("GITHUB_ACTIONS") == "true"
+    if not is_github_pipeline:
+        pull_latest_changes()
+    else:
+        print("Running inside GitHub Actions pipeline. Skipping git pull.")
+        
     start_daily_routine()    
     
     # manual_url = "https://www.amazon.in/dp/B09XML6PPD"
