@@ -501,17 +501,17 @@ def start_daily_routine():
                 with open(desc_path, "w", encoding="utf-8") as f:
                     f.write(description_text)
 
-                # youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
-                # insta_uploader.upload_to_instagram(video_path, description_text, product_url)
-                # telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)                
+                youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
+                insta_uploader.upload_to_instagram(video_path, description_text, product_url)
+                telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)                
 
-                # record_upload(asin, viral_title)
+                record_upload(asin, viral_title)
 
-                # primary_thumbnail = final_images[0] if final_images else ""
-                # compile_landing_page(
-                #     asin=asin, name=viral_title, product_url=product_url,
-                #     local_image_path=primary_thumbnail, price=item.get('price', 'Check Price')
-                # )
+                primary_thumbnail = final_images[0] if final_images else ""
+                compile_landing_page(
+                    asin=asin, name=viral_title, product_url=product_url,
+                    local_image_path=primary_thumbnail, price=item.get('price', 'Check Price')
+                )
 
                 print("✅ Successfully processed one product. Exiting pool loop.")
                 break
@@ -565,11 +565,7 @@ def run_manual_post(url):
             return
         
         # 3. PREPARE PATHS 
-        #safe_name = get_crisp_catchy_title(product['name'])
         safe_name = product['name']
-
-        # if len(safe_name) > 100:
-        #     safe_name = safe_name[:100].strip()
 
         specs = product['specs'].replace(" | ","\n-")
 
@@ -669,34 +665,34 @@ def run_manual_post(url):
         # 7. POST TO PLATFORMS        
         # YouTube (API Method - Returns YouTube Link String)
         tags = "amazon, deals, india, gadget"
-        # youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
+        youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
 
-        # # Pass that exact youtube_url string into your updated uploader module!
-        # insta_uploader.upload_to_instagram(video_path, description_text)
+        # Pass that exact youtube_url string into your updated uploader module!
+        insta_uploader.upload_to_instagram(video_path, description_text)
 
-        # # # Telegram (Funnel the captured YouTube URL string directly into our layout parameter)
-        # telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url = '')
+        # # Telegram (Funnel the captured YouTube URL string directly into our layout parameter)
+        telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url = '')
 
-        # # 8. RECORD HISTORY
-        # record_upload(product['asin'], viral_title)
-        # print(f"✅ Manual Post Complete: {product['asin']}")
+        # 8. RECORD HISTORY
+        record_upload(product['asin'], viral_title)
+        print(f"✅ Manual Post Complete: {product['asin']}")
 
-        # # --- 🌐 NEW LANDING PAGE INTEGRATION LOOP STEP ---
-        # # Fallback cascade to find whatever valid image string your scraper collected
-        # primary_thumbnail = ""
-        # if archived_images and len(archived_images) > 0:
-        #     primary_thumbnail = archived_images[0] # Points to folder/img_0.jpg
+        # --- 🌐 NEW LANDING PAGE INTEGRATION LOOP STEP ---
+        # Fallback cascade to find whatever valid image string your scraper collected
+        primary_thumbnail = ""
+        if archived_images and len(archived_images) > 0:
+            primary_thumbnail = archived_images[0] # Points to folder/img_0.jpg
         
-        # compile_landing_page(
-        #     asin=product['asin'],
-        #     name=viral_title,
-        #     product_url=product_url,
-        #     local_image_path=primary_thumbnail, # Passing the local file path
-        #     price=product.get('price', 'Check Price')
-        # )
+        compile_landing_page(
+            asin=product['asin'],
+            name=viral_title,
+            product_url=product_url,
+            local_image_path=primary_thumbnail, # Passing the local file path
+            price=product.get('price', 'Check Price')
+        )
 
-        # # 🚀 NEW: PUSH UPDATES LIVE TO GITHUB PAGES
-        # sync_landing_page_to_github()
+        # 🚀 NEW: PUSH UPDATES LIVE TO GITHUB PAGES
+        sync_landing_page_to_github()
 
     finally:  
         driver.quit()
@@ -705,7 +701,7 @@ def run_manual_post(url):
         
 
 if __name__ == "__main__":
-    # start_daily_routine()    
+    start_daily_routine()    
     
-    manual_url = "https://www.amazon.in/dp/B0C8JPGMGM"
-    run_manual_post(manual_url)
+    # manual_url = "https://www.amazon.in/dp/B0C8JPGMGM"
+    # run_manual_post(manual_url)
