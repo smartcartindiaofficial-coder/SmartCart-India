@@ -21,9 +21,9 @@ def generate_voiceover(text, output_audio_path):
         "en-US-AriaNeural",     # Natural US English (Female)
         "en-GB-RyanNeural",     # Professional UK English (Male)
         "en-GB-SoniaNeural",     # Professional UK English (Female)
-        "en-IN-KavyaNeural",      # Female - Natural conversational tone, very popular
-        "en-IN-AnanyaNeural",     # Female - Crisp, clear, friendly narrative tone
-        "en-IN-MadhurNeural",     # Male   - Natural, casual tone, sounds like a product reviewer
+        "en-IN-KavyaNeural",    # Female - Natural conversational tone, very popular
+        "en-IN-AnanyaNeural",   # Female - Crisp, clear, friendly narrative tone
+        "en-IN-MadhurNeural",   # Male   - Natural, casual tone, sounds like a product reviewer
     ]
 
     selected_voice = random.choice(voice_pool)
@@ -42,20 +42,39 @@ def generate_voiceover(text, output_audio_path):
     hook = hook.strip().replace('"', '').replace('\'', '')
     body = body.strip().replace('"', '').replace('\'', '')
 
+    # Helper function to run async functions safely regardless of loop state
+    def run_async_safe(coro):
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        if loop.is_running():
+            # If an event loop is already running in this thread, use a task
+            return asyncio.run_coroutine_threadsafe(coro, loop).result()
+        else:
+            return loop.run_until_complete(coro)
+
     # Fallback if there is no secondary text body segment
     if not body:
         async def render_single():
             communicate = edge_tts.Communicate(text, selected_voice, rate="-5%")
             await communicate.save(output_audio_path)
-        asyncio.run(render_single())
-        return True
+        try:
+            run_async_safe(render_single())
+            return True
+        except Exception as e:
+            print(f"❌ Single audio generation failed: {e}")
+            return False
 
     # Define paths for the temporary split audio files
     temp_hook_path = output_audio_path.replace(".mp3", "_hook_temp.mp3")
     temp_body_path = output_audio_path.replace(".mp3", "_body_temp.mp3")
 
     async def render_segments():
-        # ⚡ Hook segment: Spoken with higher urgency (+10% speech rate)
+        # ⚡ Hook segment: Spoken with higher urgency (+20% speech rate)
+        # REMOVED: broken proxy="http://your_residential_proxy_ip:port" parameter
         communicate_hook = edge_tts.Communicate(hook, selected_voice, rate="+20%", volume="+35%")
         await communicate_hook.save(temp_hook_path)
 
@@ -66,8 +85,8 @@ def generate_voiceover(text, output_audio_path):
         await communicate_body.save(temp_body_path)
 
     try:
-        # Render the separate segments
-        asyncio.run(render_segments())
+        # Render the separate segments safely
+        run_async_safe(render_segments())
 
         if os.path.exists(temp_hook_path) and os.path.exists(temp_body_path):
             hook_clip = AudioFileClip(temp_hook_path)
@@ -96,19 +115,13 @@ def generate_voiceover(text, output_audio_path):
             raise ValueError("Audio segment generation missing files.")
 
     except Exception as e:
-        
         print(f"⚠️ Split rendering failed ({e}). Reverting to unified audio text layout...")
         async def fallback_main():
             clean_text = text.replace("@", "").replace("||", "")
             communicate = edge_tts.Communicate(clean_text, selected_voice, rate="-5%")
             await communicate.save(output_audio_path)
         try:
-            
-            # Check if an event loop is already running to avoid nested loop crashes
-            loop = asyncio.get_event_loop()
-            if loop.is_running():                
-                nest_asyncio.apply()
-            asyncio.run(fallback_main())
+            run_async_safe(fallback_main())
             return True
         except Exception as final_err:
             print(f"❌ Critical Audio Breakdown: {final_err}")
