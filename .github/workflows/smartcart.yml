@@ -8,6 +8,9 @@ on:
   #   - cron: '12 14 * * *'  # ~7:42 PM IST (Evening Run)
   workflow_dispatch:      # This allows you to click a button on GitHub to test it manually anytime!
 
+permissions:
+  contents: write
+  
 jobs:
   run-smartcart-pipeline:
     runs-on: ubuntu-latest
