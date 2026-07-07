@@ -78,20 +78,39 @@ def upload_to_instagram(local_video_path, description_text, buy_link):
         
         # Step 2: Await Meta Processing completion
         status_url = f"https://graph.facebook.com/v19.0/{container_id}"
-        status_payload = {'fields': 'status_code', 'access_token': ACCESS_TOKEN}
+        # Request both status_code AND error_info to get maximum details
+        status_params = {'fields': 'status_code', 'access_token': ACCESS_TOKEN}
         
         attempts = 0
         while attempts < 30:
-            time.sleep(10)
+            time.sleep(5)
             attempts += 1
-            status_res = requests.get(status_url, params=status_payload).json()
-            status = status_res.get('status_code')
-            print(f"🔄 Meta Processing Status: {status}")
             
-            if status == "FINISHED":
+            try:
+                response = requests.get(status_url, params=status_params)
+                status_res = response.json()
+            except Exception as e:
+                print(f"⚠️ Network error while checking status: {e}. Retrying...")
+                continue
+
+            if "error" in status_res:
+                error_msg = status_res["error"].get("message", "Unknown API error")
+                print(f"🔄 Meta API Sync Warning: {error_msg}. Server syncing, waiting...")
+                continue 
+
+            status_code = status_res.get('status_code')
+            print(f"🔄 Meta Processing Status: {status_code}")
+
+            if status_code == 'FINISHED':
                 break
-            elif status == "ERROR":
-                print(f"❌ Meta conversion pipeline error: {status_res}")
+            elif status_code == 'EXPIRED':
+                print("❌ Meta container expired.")
+                return None
+            elif status_code == 'ERROR':
+                # The 'status' field contains Meta's explanation for the upload/pipeline failure
+                failure_reason = status_res.get('status', 'No specific error context supplied by Meta.')
+                print(f"❌ Meta conversion pipeline error: {status_code}")
+                print(f"🔍 Root Cause Details: {failure_reason}")
                 return None
 
         # Step 3: Publish container live
