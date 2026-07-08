@@ -65,7 +65,7 @@ jobs:
       run: |
         git config --local user.email "actions@github.com"
         git config --local user.name "GitHub Automation Bot"
-        git add upload_history.csv client_secrets.json index.html assets/ Exports/
+        git add upload_history.csv category_history.json index.html assets/ Exports/
         # The || true prevents the script from crashing if there are no new deals to save
         git diff-index --quiet HEAD || git commit -m "Automated Sync: History & Deals Updated [skip ci]" || true
         git push
