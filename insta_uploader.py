@@ -21,9 +21,8 @@ def clean_amazon_url(url):
 from supabase import create_client, Client
 
 # Configuration Constants
-SUPABASE_URL = "https://pdyuqhzzasveetsrotpa.supabase.co"
-# Use the service_role key to bypass RLS policies during backend creation
-SUPABASE_KEY = "sb_secret__1Sq_kzL_lDP9EWWwQ_6wg_S6poTJs-" 
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("Superbase_Secret_Key")
 BUCKET_NAME = "instagram-assets" # Create this bucket in your Supabase dashboard
 
 def upload_to_tmpfiles(local_video_path):

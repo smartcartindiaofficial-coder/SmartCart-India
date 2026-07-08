@@ -54,6 +54,8 @@ jobs:
         CLIENT_SECRETS_DATA: ${{ secrets.CLIENT_SECRETS_JSON }}
         TOKEN_BASE64: ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
         GITHUB_USERNAME: ${{ secrets.MY_GITHUB_USERNAME }}
+        Superbase_Secret_Key: ${{ secrets.Superbase_Secret_Key }}
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       run: |
         echo "$CLIENT_SECRETS_DATA" > client_secrets.json
         # Decodes the safe text string back into a pristine binary token file
