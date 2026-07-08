@@ -20,22 +20,30 @@ def clean_amazon_url(url):
 
 def upload_to_tmpfiles(local_video_path):
     """
-    Uploads the local video file to tmpfiles.org to get an instant,
-    publicly accessible raw URL for Meta ingestion.
+    Uploads the local video file to Catbox with an explicit filename 
+    and mimetype configuration so Catbox doesn't reject it.
     """
-    print(f"☁️ Uploading temporary video asset to cloud provider for Meta parsing...")
+    print(f"☁️ Uploading temporary video asset to Catbox for Meta parsing...")
     try:
-        url = "https://tmpfiles.org/api/v1/upload"
+        url = "https://catbox.moe/user/api.php"
+        payload = {'reqtype': 'fileupload'}
+
+        dynamic_filename = os.path.basename(local_video_path)
+        print(f"🔗 dynamic_filename: {dynamic_filename}")
+        
         with open(local_video_path, 'rb') as f:
-            files = {'file': f}
-            res = requests.post(url, files=files).json()
+            # Pass the extracted dynamic filename into the multipart request tuple
+            files = {'fileToUpload': (dynamic_filename, f, 'video/mp4')}
+            res = requests.post(url, data=payload, files=files)
             
-        # tmpfiles.org returns a view URL; we must change it to a raw download URL
-        # Example conversion: https://tmpfiles.org/123/video.mp4 -> https://tmpfiles.org/dl/123/video.mp4
-        view_url = res['data']['url']
-        raw_url = view_url.replace("https://tmpfiles.org/", "https://tmpfiles.org/dl/")
-        print(f"🔗 Public temporary URL generated: {raw_url}")
-        return raw_url
+        if res.status_code == 200:
+            direct_url = res.text.strip()
+            print(f"🔗 Public temporary URL generated: {direct_url}")
+            return direct_url
+        else:
+            print(f"❌ Catbox upload rejected: {res.text}")
+            return None
+            
     except Exception as e:
         print(f"❌ Temporary cloud upload failed: {e}")
         return None
@@ -99,7 +107,6 @@ def upload_to_instagram(local_video_path, description_text, buy_link):
                 continue 
 
             status_code = status_res.get('status_code')
-            print(f"🔄 status_res: {status_res}")
             print(f"🔄 Meta Processing Status: {status_code}")
 
             if status_code == 'FINISHED':
