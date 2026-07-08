@@ -18,32 +18,41 @@ def clean_amazon_url(url):
         return f"https://amazon.in/dp/{asin}/?tag={os.getenv('Affiliate_Code')}"
     return url
 
+from supabase import create_client, Client
+
+# Configuration Constants
+SUPABASE_URL = "https://pdyuqhzzasveetsrotpa.supabase.co"
+# Use the service_role key to bypass RLS policies during backend creation
+SUPABASE_KEY = "sb_secret__1Sq_kzL_lDP9EWWwQ_6wg_S6poTJs-" 
+BUCKET_NAME = "instagram-assets" # Create this bucket in your Supabase dashboard
+
 def upload_to_tmpfiles(local_video_path):
     """
-    Uploads the local video file to Catbox with an explicit filename 
-    and mimetype configuration so Catbox doesn't reject it.
+    Uploads the video asset directly to a secure Supabase storage bucket
+    and generates an unrestricted public URL for Meta ingestion.
     """
-    print(f"☁️ Uploading temporary video asset to Catbox for Meta parsing...")
+    print(f"☁️ Uploading dynamic video asset to Supabase Storage...")
     try:
-        url = "https://catbox.moe/user/api.php"
-        payload = {'reqtype': 'fileupload'}
-
-        dynamic_filename = os.path.basename(local_video_path)
-        print(f"🔗 dynamic_filename: {dynamic_filename}")
+        # Initialize Client
+        supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
         
+        # Dynamically extract original filename (e.g. Video_B0G64G1VMB.mp4)
+        dynamic_filename = os.path.basename(local_video_path)
+        
+        # Open file as binary stream
         with open(local_video_path, 'rb') as f:
-            # Pass the extracted dynamic filename into the multipart request tuple
-            files = {'fileToUpload': (dynamic_filename, f, 'video/mp4')}
-            res = requests.post(url, data=payload, files=files)
+            # Upload to your bucket (upsert=True overrides old duplicate files)
+            res = supabase.storage.from_(BUCKET_NAME).upload(
+                path=dynamic_filename,
+                file=f,
+                file_options={"content-type": "video/mp4", "upsert": "true"}
+            )
             
-        if res.status_code == 200:
-            direct_url = res.text.strip()
-            print(f"🔗 Public temporary URL generated: {direct_url}")
-            return direct_url
-        else:
-            print(f"❌ Catbox upload rejected: {res.text}")
-            return None
-            
+        # Generate the permanent public asset link
+        direct_url = supabase.storage.from_(BUCKET_NAME).get_public_url(dynamic_filename)
+        print(f"🔗 Public temporary URL generated: {direct_url}")
+        return direct_url
+        
     except Exception as e:
         print(f"❌ Temporary cloud upload failed: {e}")
         return None
