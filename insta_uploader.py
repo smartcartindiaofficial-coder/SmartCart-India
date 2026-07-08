@@ -79,7 +79,7 @@ def upload_to_instagram(local_video_path, description_text, buy_link):
         # Step 2: Await Meta Processing completion
         status_url = f"https://graph.facebook.com/v19.0/{container_id}"
         # Request both status_code AND error_info to get maximum details
-        status_params = {'fields': 'status_code', 'access_token': ACCESS_TOKEN}
+        status_params = {'fields': 'status_code, status', 'access_token': ACCESS_TOKEN}
         
         attempts = 0
         while attempts < 30:
@@ -99,6 +99,7 @@ def upload_to_instagram(local_video_path, description_text, buy_link):
                 continue 
 
             status_code = status_res.get('status_code')
+            print(f"🔄 status_res: {status_res}")
             print(f"🔄 Meta Processing Status: {status_code}")
 
             if status_code == 'FINISHED':
