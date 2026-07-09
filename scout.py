@@ -220,7 +220,7 @@ def get_bestsellers(driver, count):
 
                 for el in image_elements:
                     dyn_img_attr = el.get_attribute("data-a-dynamic-image")
-                    if not dyn_img_attr or len(high_res_urls) >= 7:
+                    if not dyn_img_attr or len(high_res_urls) >= 5:
                         continue
                         
                     try:
