@@ -65,22 +65,29 @@
 			try {
 				// 1. Resolve short links (amzn.to or amzn.in) if present
 				if (urlText.includes('amzn.to') || urlText.includes('amzn.in')) {
-					// AllOrigins JSON Wrapper lets us bypass CORS and retrieve details of the page
-					const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(urlText)}`;
-					const response = await fetch(proxyUrl);
+					const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
 					
-					if (!response.ok) {
-						throw new Error("Could not reach redirect resolver service.");
-					}
-					
-					const data = await response.json();
-					
-					// AllOrigins returns the final redirected URL inside data.status.url
-					if (data && data.status && data.status.url) {
-						urlText = data.status.url;
-					} else {
-						throw new Error("Could not extract destination URL from shortener.");
-					}
+					try {
+						const response = await fetch(proxyUrl + shortUrl, {
+							method: 'GET',
+							// redirect: 'manual' tells the browser to NOT follow the redirect automatically, 
+							// allowing us to read the HTTP 301/302 "Location" header instead.
+							redirect: 'manual' 
+						});
+
+						// The target long URL will be hidden inside the response headers
+						const longUrl = response.headers.get('Location');
+						
+						if (longUrl) {
+							urlText = longUrl;
+						} else {
+							// Fallback: If the proxy automatically followed it, the final URL is the response.url
+							throw new Error(response.url);
+						}
+					} catch (error) {
+						console.error("Error expanding URL:", error);
+						throw new Error("Could not resolve the short link.");
+					}				
 				}
 
 				// 2. Extract the 10-character Product ID (ASIN/ISBN)
