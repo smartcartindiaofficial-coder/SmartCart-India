@@ -33,7 +33,7 @@
 </head>
 <body>
     <script>
-		// Your Store Tracking ID
+		// Your Amazon Store Affiliate ID
 		const AFFILIATE_TAG = 'smartcart03b-21';
 
 		async function generateAffiliateLink() {
@@ -45,46 +45,65 @@
 
 			let urlText = inputField.value.trim();
 			
-			// Reset states
+			// Clear previous states
 			errorMessage.style.display = 'none';
 			resultContainer.style.display = 'none';
 
 			if (!urlText) {
-				showError("Please paste a valid URL.");
+				showError("Please paste a valid Amazon URL.");
 				return;
 			}
 
-			convertBtn.innerText = "Converting...";
+			// Standardize input prefix
+			if (!urlText.startsWith('http://') && !urlText.startsWith('https://')) {
+				urlText = 'https://' + urlText;
+			}
+
+			convertBtn.innerText = "Processing...";
 			convertBtn.disabled = true;
 
 			try {
-				// Handle short links (amzn.to or amzn.in/d/) by resolving the redirect via a free CORS proxy
-				if (urlText.includes('amzn.to') || urlText.includes('amzn.in/d/')) {
-					const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(urlText)}`;
+				// 1. Resolve short links (amzn.to or amzn.in) if present
+				if (urlText.includes('amzn.to') || urlText.includes('amzn.in')) {
+					// AllOrigins JSON Wrapper lets us bypass CORS and retrieve details of the page
+					const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(urlText)}`;
 					const response = await fetch(proxyUrl);
-					if (response.ok) {
-						urlText = response.url; 
+					
+					if (!response.ok) {
+						throw new Error("Could not reach redirect resolver service.");
+					}
+					
+					const data = await response.json();
+					
+					// AllOrigins returns the final redirected URL inside data.status.url
+					if (data && data.status && data.status.url) {
+						urlText = data.status.url;
 					} else {
-						throw new Error("Could not expand short URL.");
+						throw new Error("Could not extract destination URL from shortener.");
 					}
 				}
 
-				// Regex pattern to extract a 10-character Amazon ASIN
-				const asinMatch = urlText.match(/(?:dp|gp\/product|exec\/obidos\/asin)\/([A-Z0-9]{10})/i);
+				// 2. Extract the 10-character Product ID (ASIN/ISBN)
+				// This regular expression captures both desktop layouts and mobile layouts
+				const asinMatch = urlText.match(/(?:dp|gp\/product|exec\/obidos\/asin|product)\/([A-Z0-9]{10})/i);
 
 				if (asinMatch && asinMatch[1]) {
-					const asin = asinMatch[1];
-					// Constructing your clean affiliate link mapping to Amazon.in
+					const asin = asinMatch[1].toUpperCase();
+					
+					// Generate clean Amazon India affiliate address
 					const cleanAffiliateUrl = `https://www.amazon.in/dp/${asin}?tag=${AFFILIATE_TAG}`;
 					
-					// Assign target link to anchor tag
+					// Set href for the "Get Deal" anchor button
 					dealButton.href = cleanAffiliateUrl;
+					
+					// Show the purple button container
 					resultContainer.style.display = 'block';
 				} else {
-					showError("Could not extract Amazon product ID. Make sure it's a valid product link.");
+					showError("Could not extract Amazon product ID. Make sure it is a valid product link.");
 				}
 			} catch (err) {
-				showError("Failed to process the link. Please try a full desktop URL.");
+				console.error(err);
+				showError("Failed to process the link. If it's a short link, try using the full browser link instead.");
 			} finally {
 				convertBtn.innerText = "Convert Link";
 				convertBtn.disabled = false;
@@ -97,7 +116,7 @@
 			errorMessage.style.display = 'block';
 		}
 	</script>
-    
+
     <div class="header-panel">
         <h1>🔥Best Daily Deals - SmartCart India🔥</h1>
         <p>Handpicked Premium Tech & Lifestyle Amazon Finds</p>
