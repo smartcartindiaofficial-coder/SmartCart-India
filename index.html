@@ -33,96 +33,81 @@
 </head>
 <body>
     <script>
-		// Your Amazon Store Affiliate ID
-		const AFFILIATE_TAG = 'smartcart03b-21';
+        // Your Global Amazon Affiliate ID
+        const AFFILIATE_TAG = 'smartcart03b-21';
+        let generatedAffiliateUrl = "";
 
-		async function generateAffiliateLink() {
-			const inputField = document.getElementById('amazonInput');
-			const resultContainer = document.getElementById('resultContainer');
-			const dealButton = document.getElementById('dealButton');
-			const errorMessage = document.getElementById('errorMessage');
-			const convertBtn = document.getElementById('convertBtn');
+        /**
+         * Checks if the device is a mobile browser
+         */
+        function isMobile() {
+            return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        }
 
-			let urlText = inputField.value.trim();
-			
-			// Clear previous states
-			errorMessage.style.display = 'none';
-			resultContainer.style.display = 'none';
+        /**
+         * Extracts ASIN or parses any Amazon URL to transform into an Affiliate Link
+         */
+        function processUrl() {
+            const rawUrlInput = document.getElementById('raw-url').value.trim();
+            const resultBox = document.getElementById('result-box');
+            
+            if (!rawUrlInput) {
+                alert("Please enter a valid Amazon URL!");
+                return;
+            }
 
-			if (!urlText) {
-				showError("Please paste a valid Amazon URL.");
-				return;
-			}
+            // Regular expression to match standard 10-digit Amazon ASIN
+            const asinRegex = /\/([A-Z0-9]{10})(?:[\/?]|$)/i;
+            const match = rawUrlInput.match(asinRegex);
 
-			// Standardize input prefix
-			if (!urlText.startsWith('http://') && !urlText.startsWith('https://')) {
-				urlText = 'https://' + urlText;
-			}
+            if (match && match[1]) {
+                const asin = match[1];
+                // Generate a clean, canonical affiliate URL
+                generatedAffiliateUrl = `https://www.amazon.in/dp/${asin}?tag=${AFFILIATE_TAG}`;
+            } else {
+                // Fallback: If it is a short link (like amzn.to) or custom format,
+                // we clean up existing tag/associates parameters and append ours.
+                try {
+                    let urlObj = new URL(rawUrlInput);
+                    urlObj.searchParams.set('tag', AFFILIATE_TAG);
+                    generatedAffiliateUrl = urlObj.toString();
+                } catch (e) {
+                    // Fail-safe manual query-string append if URL parsing fails
+                    const separator = rawUrlInput.includes('?') ? '&' : '?';
+                    generatedAffiliateUrl = `${rawUrlInput}${separator}tag=${AFFILIATE_TAG}`;
+                }
+            }
 
-			convertBtn.innerText = "Processing...";
-			convertBtn.disabled = true;
+            // Show the "Get Deal" box
+            resultBox.style.display = "block";
+        }
 
-			try {
-				// 1. Resolve short links (amzn.to or amzn.in) if present
-				if (urlText.includes('amzn.to') || urlText.includes('amzn.in')) {
-					const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
-					
-					try {
-						const response = await fetch(proxyUrl + shortUrl, {
-							method: 'GET',
-							// redirect: 'manual' tells the browser to NOT follow the redirect automatically, 
-							// allowing us to read the HTTP 301/302 "Location" header instead.
-							redirect: 'manual' 
-						});
+        /**
+         * Handles the redirection logic when clicking the "Get Deal" button.
+         * Detects desktop vs mobile, utilizing custom schemas to force the native Amazon App.
+         */
+        function handleDealClick() {
+            if (!generatedAffiliateUrl) return;
 
-						// The target long URL will be hidden inside the response headers
-						const longUrl = response.headers.get('Location');
-						
-						if (longUrl) {
-							urlText = longUrl;
-						} else {
-							// Fallback: If the proxy automatically followed it, the final URL is the response.url
-							throw new Error(response.url);
-						}
-					} catch (error) {
-						console.error("Error expanding URL:", error);
-						throw new Error("Could not resolve the short link.");
-					}				
-				}
+            if (isMobile()) {
+                // Extract clean URL parts to format for the Amazon Mobile App Deep Link scheme
+                // Standard app URI scheme: amazon://apps/android?phone_deeplink_fallback_url=...
+                // Or directly transforming standard link to amazon://
+                const appUri = generatedAffiliateUrl.replace(/^https?:\/\//, 'amazon://');
+                
+                // Try opening the app URI
+                window.location.href = appUri;
 
-				// 2. Extract the 10-character Product ID (ASIN/ISBN)
-				// This regular expression captures both desktop layouts and mobile layouts
-				const asinMatch = urlText.match(/(?:dp|gp\/product|exec\/obidos\/asin|product)\/([A-Z0-9]{10})/i);
-
-				if (asinMatch && asinMatch[1]) {
-					const asin = asinMatch[1].toUpperCase();
-					
-					// Generate clean Amazon India affiliate address
-					const cleanAffiliateUrl = `https://www.amazon.in/dp/${asin}?tag=${AFFILIATE_TAG}`;
-					
-					// Set href for the "Get Deal" anchor button
-					dealButton.href = cleanAffiliateUrl;
-					
-					// Show the purple button container
-					resultContainer.style.display = 'block';
-				} else {
-					showError("Could not extract Amazon product ID. Make sure it is a valid product link.");
-				}
-			} catch (err) {
-				console.error(err);
-				showError("Failed to process the link. If it's a short link, try using the full browser link instead.");
-			} finally {
-				convertBtn.innerText = "Convert Link";
-				convertBtn.disabled = false;
-			}
-		}
-
-		function showError(msg) {
-			const errorMessage = document.getElementById('errorMessage');
-			errorMessage.innerText = msg;
-			errorMessage.style.display = 'block';
-		}
-	</script>
+                // Fallback: if the app is not installed, open standard browser route after a short delay
+                setTimeout(() => {
+                    window.open(generatedAffiliateUrl, '_blank');
+                }, 1250);
+            } else {
+                // Desktop client -> Open in a new browser tab
+                window.open(generatedAffiliateUrl, '_blank');
+            }
+        }
+    </script>
 
     <div class="header-panel">
         <h1>🔥Best Daily Deals - SmartCart India🔥</h1>
@@ -141,21 +126,19 @@
         </div>
     </div>
 
-    <div class="converter-container" style="max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; text-align: center; background: #fafafa;">
-		<h3>Quick Amazon Link Converter</h3>
-		<p style="font-size: 14px; color: #666;">Paste an Amazon India URL to generate your customized deal link instantly.</p>
-		
-		<input type="text" id="amazonInput" placeholder="Paste Amazon link here (e.g., https://amzn.in/... or https://amazon.in/dp/...)" style="width: 80%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px;">
-		<br>
-		<button id="convertBtn" onclick="generateAffiliateLink()" style="padding: 10px 20px; background-color: #ff9900; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Convert Link</button>
-		
-		<!-- Dynamic Deal Button Container -->
-		<div id="resultContainer" style="margin-top: 20px; display: none;">
-			<a id="dealButton" href="#" target="_blank" style="display: inline-block; padding: 12px 30px; background-color: #a435f0; color: white; text-decoration: none; font-weight: bold; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">Get Deal ➔</a>
-		</div>
-		
-		<p id="errorMessage" style="color: red; margin-top: 10px; display: none;"></p>
-	</div>
+    <!-- ─── CONVERTER BOX ─── -->
+    <div class="converter-container">
+        <div class="converter-title">Convert Amazon URL to Affiliate</div>
+        <div class="input-group">
+            <input type="text" id="raw-url" class="url-input" placeholder="Paste Amazon Link (Long or Short)...">
+            <button class="convert-btn" onclick="processUrl()">Convert</button>
+        </div>
+        
+        <!-- Generated Button Area -->
+        <div id="result-box" class="result-container">
+            <button id="affiliate-deal-btn" class="result-link-btn" onclick="handleDealClick()">Get Deal ➔</button>
+        </div>
+    </div>
 
     <div class="deals-container" id="deals-wrapper">
 
