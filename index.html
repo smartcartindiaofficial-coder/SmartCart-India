@@ -32,6 +32,72 @@
     </style>
 </head>
 <body>
+    <script>
+		// Your Store Tracking ID
+		const AFFILIATE_TAG = 'smartcart03b-21';
+
+		async function generateAffiliateLink() {
+			const inputField = document.getElementById('amazonInput');
+			const resultContainer = document.getElementById('resultContainer');
+			const dealButton = document.getElementById('dealButton');
+			const errorMessage = document.getElementById('errorMessage');
+			const convertBtn = document.getElementById('convertBtn');
+
+			let urlText = inputField.value.trim();
+			
+			// Reset states
+			errorMessage.style.display = 'none';
+			resultContainer.style.display = 'none';
+
+			if (!urlText) {
+				showError("Please paste a valid URL.");
+				return;
+			}
+
+			convertBtn.innerText = "Converting...";
+			convertBtn.disabled = true;
+
+			try {
+				// Handle short links (amzn.to or amzn.in/d/) by resolving the redirect via a free CORS proxy
+				if (urlText.includes('amzn.to') || urlText.includes('amzn.in/d/')) {
+					const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(urlText)}`;
+					const response = await fetch(proxyUrl);
+					if (response.ok) {
+						urlText = response.url; 
+					} else {
+						throw new Error("Could not expand short URL.");
+					}
+				}
+
+				// Regex pattern to extract a 10-character Amazon ASIN
+				const asinMatch = urlText.match(/(?:dp|gp\/product|exec\/obidos\/asin)\/([A-Z0-9]{10})/i);
+
+				if (asinMatch && asinMatch[1]) {
+					const asin = asinMatch[1];
+					// Constructing your clean affiliate link mapping to Amazon.in
+					const cleanAffiliateUrl = `https://www.amazon.in/dp/${asin}?tag=${AFFILIATE_TAG}`;
+					
+					// Assign target link to anchor tag
+					dealButton.href = cleanAffiliateUrl;
+					resultContainer.style.display = 'block';
+				} else {
+					showError("Could not extract Amazon product ID. Make sure it's a valid product link.");
+				}
+			} catch (err) {
+				showError("Failed to process the link. Please try a full desktop URL.");
+			} finally {
+				convertBtn.innerText = "Convert Link";
+				convertBtn.disabled = false;
+			}
+		}
+
+		function showError(msg) {
+			const errorMessage = document.getElementById('errorMessage');
+			errorMessage.innerText = msg;
+			errorMessage.style.display = 'block';
+		}
+	</script>
+    
     <div class="header-panel">
         <h1>🔥Best Daily Deals - SmartCart India🔥</h1>
         <p>Handpicked Premium Tech & Lifestyle Amazon Finds</p>
@@ -48,6 +114,23 @@
             </a>
         </div>
     </div>
+
+    <div class="converter-container" style="max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; text-align: center; background: #fafafa;">
+		<h3>Quick Amazon Link Converter</h3>
+		<p style="font-size: 14px; color: #666;">Paste an Amazon India URL to generate your customized deal link instantly.</p>
+		
+		<input type="text" id="amazonInput" placeholder="Paste Amazon link here (e.g., https://amzn.in/... or https://amazon.in/dp/...)" style="width: 80%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px;">
+		<br>
+		<button id="convertBtn" onclick="generateAffiliateLink()" style="padding: 10px 20px; background-color: #ff9900; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Convert Link</button>
+		
+		<!-- Dynamic Deal Button Container -->
+		<div id="resultContainer" style="margin-top: 20px; display: none;">
+			<a id="dealButton" href="#" target="_blank" style="display: inline-block; padding: 12px 30px; background-color: #a435f0; color: white; text-decoration: none; font-weight: bold; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">Get Deal ➔</a>
+		</div>
+		
+		<p id="errorMessage" style="color: red; margin-top: 10px; display: none;"></p>
+	</div>
+
     <div class="deals-container" id="deals-wrapper">
 
         <div class="deal-card" id="card-B0D548FJ14">
