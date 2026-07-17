@@ -19,6 +19,7 @@
         .header-panel { text-align: center; margin: 25px 0; max-width: 480px; width: 100%; }
         .header-panel h1 { font-size: 1.5rem; color: var(--text); margin-bottom: 5px; }
         .header-panel p { font-size: 0.9rem; color: #8b8ba7; }
+
         /* ─── CONVERTER SECTION STYLES ─── */
         .converter-container { max-width: 480px; width: 100%; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; }
         .converter-title { font-size: 1rem; font-weight: 600; color: var(--accent); margin-bottom: 2px; }
@@ -30,8 +31,9 @@
         
         /* Result Box Styles */
         .result-container { display: none; background: rgba(255, 153, 0, 0.05); border: 1px dashed var(--accent); border-radius: 8px; padding: 12px; margin-top: 5px; text-align: center; }
-        .result-link-btn { display: inline-block; background: var(--accent); color: #000; text-decoration: none; font-size: 0.9rem; font-weight: 700; padding: 10px 20px; border-radius: 6px; transition: opacity 0.2s; width: 100%; text-align: center; cursor: pointer; }
+        .result-link-btn { display: inline-block; background: var(--accent); color: #000; text-decoration: none; font-size: 0.9rem; font-weight: 700; padding: 10px 20px; border-radius: 6px; transition: opacity 0.2s; width: 100%; text-align: center; }
         .result-link-btn:hover { opacity: 0.9; }
+
         .deals-container { max-width: 480px; width: 100%; display: flex; flex-direction: column; gap: 15px; }
         .deal-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; display: flex; padding: 12px; gap: 12px; align-items: center; transition: transform 0.2s; }
         .deal-card:hover { transform: scale(1.01); border-color: var(--accent); }
@@ -46,79 +48,41 @@
 </head>
 <body>
     <script>
-        // Your Global Amazon Affiliate ID
         const AFFILIATE_TAG = 'smartcart03b-21';
-        let generatedAffiliateUrl = "";
 
-        /**
-         * Checks if the device is a mobile browser
-         */
-        function isMobile() {
-            return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-        }
-
-        /**
-         * Extracts ASIN or parses any Amazon URL to transform into an Affiliate Link
-         */
         function processUrl() {
             const rawUrlInput = document.getElementById('raw-url').value.trim();
             const resultBox = document.getElementById('result-box');
+            const dealButton = document.getElementById('affiliate-deal-btn');
             
             if (!rawUrlInput) {
                 alert("Please enter a valid Amazon URL!");
                 return;
             }
 
-            // Regular expression to match standard 10-digit Amazon ASIN
+            let finalUrl = "";
             const asinRegex = /\/([A-Z0-9]{10})(?:[\/?]|$)/i;
             const match = rawUrlInput.match(asinRegex);
 
             if (match && match[1]) {
                 const asin = match[1];
-                // Generate a clean, canonical affiliate URL
-                generatedAffiliateUrl = `https://www.amazon.in/dp/${asin}?tag=${AFFILIATE_TAG}`;
+                finalUrl = `https://www.amazon.in/dp/${asin}?tag=${AFFILIATE_TAG}`;
             } else {
-                // Fallback: If it is a short link (like amzn.to) or custom format,
-                // we clean up existing tag/associates parameters and append ours.
                 try {
                     let urlObj = new URL(rawUrlInput);
                     urlObj.searchParams.set('tag', AFFILIATE_TAG);
-                    generatedAffiliateUrl = urlObj.toString();
+                    finalUrl = urlObj.toString();
                 } catch (e) {
-                    // Fail-safe manual query-string append if URL parsing fails
                     const separator = rawUrlInput.includes('?') ? '&' : '?';
-                    generatedAffiliateUrl = `${rawUrlInput}${separator}tag=${AFFILIATE_TAG}`;
+                    finalUrl = `${rawUrlInput}${separator}tag=${AFFILIATE_TAG}`;
                 }
             }
 
-            // Show the "Get Deal" box
+            // Bind the final native URL directly to the anchor href attribute
+            dealButton.href = finalUrl;
+            
+            // Show the result container element
             resultBox.style.display = "block";
-        }
-
-        /**
-         * Handles the redirection logic when clicking the "Get Deal" button.
-         * Detects desktop vs mobile, utilizing custom schemas to force the native Amazon App.
-         */
-        function handleDealClick() {
-            if (!generatedAffiliateUrl) return;
-
-            if (isMobile()) {
-                // Extract clean URL parts to format for the Amazon Mobile App Deep Link scheme
-                // Standard app URI scheme: amazon://apps/android?phone_deeplink_fallback_url=...
-                // Or directly transforming standard link to amazon://
-                const appUri = generatedAffiliateUrl.replace(/^https?:\/\//, 'amazon://');
-                
-                // Try opening the app URI
-                window.location.href = appUri;
-
-                // Fallback: if the app is not installed, open standard browser route after a short delay
-                setTimeout(() => {
-                    window.open(generatedAffiliateUrl, '_blank');
-                }, 1250);
-            } else {
-                // Desktop client -> Open in a new browser tab
-                window.open(generatedAffiliateUrl, '_blank');
-            }
         }
     </script>
 
@@ -147,9 +111,9 @@
             <button class="convert-btn" onclick="processUrl()">Convert</button>
         </div>
         
-        <!-- Generated Button Area -->
+        <!-- Generated HTML Anchor Element instead of a JavaScript trigger button -->
         <div id="result-box" class="result-container">
-            <button id="affiliate-deal-btn" class="result-link-btn" onclick="handleDealClick()">Get Deal ➔</button>
+            <a id="affiliate-deal-btn" class="result-link-btn" href="#" target="_blank">Get Deal ➔</a>
         </div>
     </div>
 
