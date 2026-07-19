@@ -98,8 +98,10 @@ def upload_to_instagram(local_video_path, description_text, buy_link):
         status_params = {'fields': 'status_code, status', 'access_token': ACCESS_TOKEN}
         
         attempts = 0
+        is_ready = False
+
         while attempts < 30:
-            time.sleep(5)
+            time.sleep(15)
             attempts += 1
             
             try:
@@ -118,6 +120,7 @@ def upload_to_instagram(local_video_path, description_text, buy_link):
             print(f"🔄 Meta Processing Status: {status_code}")
 
             if status_code == 'FINISHED':
+                is_ready = True
                 break
             elif status_code == 'EXPIRED':
                 print("❌ Meta container expired.")
@@ -128,8 +131,17 @@ def upload_to_instagram(local_video_path, description_text, buy_link):
                 print(f"❌ Meta conversion pipeline error: {status_code}")
                 print(f"🔍 Root Cause Details: {failure_reason}")
                 return None
+            
+        if not is_ready:
+            print("❌ Meta processing timed out.")
+            return None
+        
+        # 🚨 THE CRITICAL FIX: Grace period for Meta distributed database synchronization.
+        print("⏳ Status finished. Giving Meta 10 seconds to catch up before publishing...")
+        time.sleep(10)
 
         # Step 3: Publish container live
+        print("🚀 Sending publish command...")
         publish_url = f"https://graph.facebook.com/v19.0/{INSTAGRAM_ACCOUNT_ID}/media_publish"
         publish_payload = {'creation_id': container_id, 'access_token': ACCESS_TOKEN}
         publish_res = requests.post(publish_url, data=publish_payload).json()
