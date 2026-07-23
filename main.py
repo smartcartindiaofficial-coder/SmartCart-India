@@ -518,7 +518,7 @@ def start_daily_routine():
                 with open(desc_path, "w", encoding="utf-8") as f:
                     f.write(description_text)
 
-                youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
+                youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text.replace(" - @amazondotin",""), backend_yt_tags)
                 insta_uploader.upload_to_instagram(video_path, description_text, product_url)
                 telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)                
 
@@ -683,7 +683,7 @@ def run_manual_post(url):
         # 7. POST TO PLATFORMS        
         # YouTube (API Method - Returns YouTube Link String)
         tags = "amazon, deals, india, gadget"
-        youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text, backend_yt_tags)
+        youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text.replace(" - @amazondotin",""), backend_yt_tags)
 
         # Pass that exact youtube_url string into your updated uploader module!
         insta_uploader.upload_to_instagram(video_path, description_text, '')
