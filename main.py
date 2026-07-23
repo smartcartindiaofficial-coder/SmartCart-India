@@ -115,7 +115,7 @@ def reframe_product_for_youtube(raw_name, raw_specs):
             body = lines[2].replace("Line 3:", " ").strip()
             
             # Combine hook and body into a smooth audio text script for edge_tts to read
-            voiceover_script_tmp = f"{hook}@{body}     Direct deal link is pinned in the comments below!"
+            voiceover_script_tmp = f"{hook}@{body} Direct deal link is pinned in the comments below!"
             voiceover_script = re.sub(r'\d+\.\s*', '', voiceover_script_tmp)
             return viral_title, voiceover_script
         else:
@@ -506,7 +506,7 @@ def start_daily_routine():
                 backend_yt_tags = ", ".join([tag.replace("#", "").lower() for tag in selected_tags])
 
                 description_text = (
-                    f"📦 {viral_title}\n\nBuy Link: {product_url}\n\n"
+                    f"📦 {viral_title} - @amazondotin\n\nBuy Link: {product_url}\n\n"
                     "website: https://smartcartindiaofficial-coder.github.io/SmartCart-India/ \n"
                     "Instagram: https://www.instagram.com/smartcartindiaofficial\n"
                     "YouTube: https://www.youtube.com/@SmartCartIndiaOfficial\n"
@@ -668,7 +668,7 @@ def run_manual_post(url):
 
         # 6. SAVE DESCRIPTION FILE (Loaded with contextual optimization strings)
         description_text = (
-            f"📦 {viral_title}\n\nBuy Link: {product_url}\n\n"
+            f"📦 {viral_title} - @amazondotin\n\nBuy Link: {product_url}\n\n"
             "website: https://smartcartindiaofficial-coder.github.io/SmartCart-India/ \n"
             "Instagram: https://www.instagram.com/smartcartindiaofficial\n"
             "YouTube: https://www.youtube.com/@SmartCartIndiaOfficial\n"
