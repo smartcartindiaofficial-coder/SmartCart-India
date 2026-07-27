@@ -312,20 +312,11 @@ def get_bestsellers(driver, count):
 def scrape_specific_product(driver, product_url):
     print(f"🎯 Manual Target: {product_url}")
     driver.get(product_url)
-    time.sleep(15)
+    time.sleep(5)
 
     try:
-        current_url = driver.current_url.split("?")[0]
-        print(f"🎯 current_url: {current_url}")
-        driver.get(current_url)
-
         name = driver.find_element(By.ID, "productTitle").text.strip()
-
-        # asin = product_url.split("/dp/")[1].split("/")[0] if "/dp/" in product_url else "MANUAL"        
-        asin_match = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', current_url)
-        asin = asin_match.group(1) if asin_match else "MANUAL"
-        print(f"🎯 asin: {asin}")
-
+        asin = product_url.split("/dp/")[1].split("/")[0] if "/dp/" in product_url else "MANUAL"
         bullets = driver.find_elements(By.CSS_SELECTOR, "#feature-bullets ul li span")
         specs = " | ".join([b.text.strip() for b in bullets if len(b.text.strip()) > 10][:3])
         try:

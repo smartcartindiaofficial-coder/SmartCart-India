@@ -13,6 +13,7 @@ from google import genai
 from google.genai import types
 
 from dotenv import load_dotenv
+from selenium.webdriver.common.by import By
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.path.join(SCRIPT_DIR, 'Config.env')
@@ -572,8 +573,12 @@ def run_manual_post(url):
         driver = webdriver.Chrome(options=options)
     
     try:
+        driver.get(url)
+        time.sleep(15)
+        current_url = driver.current_url.split("?")[0]
+
         # 1. Scrape the data
-        product = scout.scrape_specific_product(driver, url)
+        product = scout.scrape_specific_product(driver, current_url)
         if not product:
             return
 
@@ -743,7 +748,7 @@ def process_manual_queue(file_name="manual_urls.txt"):
         return False
 
     target_url = url_match.group(0)
-    print(f"🚀 Found manual trigger URL: {target_url}")
+    print(f"🚀 Found manual trigger URL: {target_url}")    
 
     try:
         run_manual_post(target_url)
