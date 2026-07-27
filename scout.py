@@ -315,8 +315,9 @@ def scrape_specific_product(driver, product_url):
     time.sleep(15)
 
     try:
-        current_url = driver.current_url
+        current_url = driver.current_url.split("?")[0]
         print(f"🎯 current_url: {current_url}")
+        driver.get(current_url)
 
         name = driver.find_element(By.ID, "productTitle").text.strip()
 
