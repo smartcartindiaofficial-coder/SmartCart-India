@@ -716,16 +716,61 @@ def run_manual_post(url):
         driver.quit()
         print("🧹 Cleaning up unused product images...")
         cleanup_temp_files()
+
+
+def process_manual_queue(file_name="manual_urls.txt"):
+    """
+    Checks if manual_urls.txt exists and contains a valid URL.
+    Processes the URL via run_manual_post and clears the file afterward.
+    """
+    manual_file_path = os.path.join(BASE_DIR, file_name)
+    
+    if not os.path.exists(manual_file_path):
+        return False
+
+    with open(manual_file_path, "r", encoding="utf-8") as f:
+        content = f.read().strip()
+
+    if not content:
+        print("ℹ️ Manual queue file is empty. Proceeding to daily routine.")
+        return False
+
+    # Extract the raw HTTP/HTTPS URL (handles extra text pasted from Android share sheets)
+    url_match = re.search(r'https?://[^\s]+', content)
+    if not url_match:
+        print("⚠️ No valid URL found in manual_urls.txt. Clearing invalid content.")
+        open(manual_file_path, "w", encoding="utf-8").close()
+        return False
+
+    target_url = url_match.group(0)
+    print(f"🚀 Found manual trigger URL: {target_url}")
+
+    try:
+        run_manual_post(target_url)
+    except Exception as e:
+        print(f"❌ Error executing manual post: {e}")
+    finally:
+        # Clear the file so it won't re-run on subsequent executions
+        open(manual_file_path, "w", encoding="utf-8").close()
+        print("🧹 Cleared manual_urls.txt.")
+
+    return True
         
 
 if __name__ == "__main__":
     is_github_pipeline = os.environ.get("GITHUB_ACTIONS") == "true"
+    
     if not is_github_pipeline:
         pull_latest_changes()
     else:
         print("Running inside GitHub Actions pipeline. Skipping git pull.")
 
-    start_daily_routine()    
+    # 1. First check if there is a manual URL waiting to be posted
+    processed_manual = process_manual_queue("manual_urls.txt")
+
+    # 2. If no manual URL was present, run the normal daily routine
+    if not processed_manual:
+        start_daily_routine()
     
     # manual_url = "https://www.amazon.in/dp/B0FJG1V6RJ"
     # run_manual_post(manual_url)

@@ -6,6 +6,10 @@ on:
   #   - cron: '18 3 * * *'   # ~8:48 AM IST (Morning Run)
   #   - cron: '23 8 * * *'   # ~1:53 PM IST (Afternoon Run)
   #   - cron: '12 14 * * *'  # ~7:42 PM IST (Evening Run)
+  push:
+    paths:
+      - 'manual_urls.txt'
+
   workflow_dispatch:      # This allows you to click a button on GitHub to test it manually anytime!
 
 permissions:
@@ -67,7 +71,7 @@ jobs:
       run: |
         git config --local user.email "actions@github.com"
         git config --local user.name "GitHub Automation Bot"
-        git add upload_history.csv category_history.json index.html assets/ Exports/
+        git add upload_history.csv category_history.json index.html assets/ Exports/ manual_urls.txt
         # The || true prevents the script from crashing if there are no new deals to save
         git diff-index --quiet HEAD || git commit -m "Automated Sync: History & Deals Updated [skip ci]" || true
         git push
