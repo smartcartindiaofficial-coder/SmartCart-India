@@ -574,7 +574,7 @@ def run_manual_post(url):
     
     try:
         driver.get(url)
-        time.sleep(15)
+        time.sleep(60)
         current_url = driver.current_url.split("?")[0]
 
         # 1. Scrape the data

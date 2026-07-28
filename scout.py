@@ -312,7 +312,7 @@ def get_bestsellers(driver, count):
 def scrape_specific_product(driver, product_url):
     print(f"🎯 Manual Target: {product_url}")
     driver.get(product_url)
-    time.sleep(5)
+    time.sleep(30)
 
     try:
         name = driver.find_element(By.ID, "productTitle").text.strip()
