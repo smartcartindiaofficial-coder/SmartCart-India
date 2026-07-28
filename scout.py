@@ -317,7 +317,7 @@ def scrape_specific_product(driver, product_url):
     driver.get(product_url)
     
     # 1. Wait up to 10 seconds for the title to appear in the DOM
-    wait = WebDriverWait(driver, 10)
+    wait = WebDriverWait(driver, 30)
 
     try:
         # Check if Amazon triggered a CAPTCHA / Bot Check page
