@@ -314,7 +314,12 @@ from selenium.webdriver.support import expected_conditions as EC
 
 def scrape_specific_product(driver, product_url):
     print(f"🎯 Manual Target: {product_url}")
+    driver.set_window_size(1920, 1080)
     driver.get(product_url)
+    driver.execute_script("window.scrollTo(0, 350);")
+    time.sleep(2)
+    driver.execute_script("window.scrollTo(0, 0);")            
+    time.sleep(30)
     
     # 1. Wait up to 10 seconds for the title to appear in the DOM
     wait = WebDriverWait(driver, 30)
