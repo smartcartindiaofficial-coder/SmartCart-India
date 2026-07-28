@@ -309,27 +309,67 @@ def get_bestsellers(driver, count):
             continue
     return products
 
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
 def scrape_specific_product(driver, product_url):
     print(f"🎯 Manual Target: {product_url}")
     driver.get(product_url)
-    time.sleep(30)
+    
+    # 1. Wait up to 10 seconds for the title to appear in the DOM
+    wait = WebDriverWait(driver, 10)
 
     try:
-        name = driver.find_element(By.ID, "productTitle").text.strip()
-        asin = product_url.split("/dp/")[1].split("/")[0] if "/dp/" in product_url else "MANUAL"
-        bullets = driver.find_elements(By.CSS_SELECTOR, "#feature-bullets ul li span")
+        # Check if Amazon triggered a CAPTCHA / Bot Check page
+        if "captcha" in driver.title.lower() or "robot check" in driver.page_source.lower():
+            print("⚠️ Amazon presented a CAPTCHA or Anti-Bot check!")
+            return None
+
+        # Fallback element checking for Product Title
+        name = ""
+        title_selectors = ["#productTitle", "#title", "h1.a-size-large", "span#productTitle"]
+        for selector in title_selectors:
+            try:
+                elem = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+                name = elem.text.strip()
+                if name:
+                    break
+            except Exception:
+                continue
+
+        if not name:
+            print("❌ Could not locate product title using standard selectors.")
+            return None
+
+        # 2. Extract ASIN directly from driver.current_url after all redirects complete
+        current_url = driver.current_url
+        asin_match = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', current_url)
+        if asin_match:
+            asin = asin_match.group(1)
+        else:
+            try:
+                asin = driver.find_element(By.ID, "ASIN").get_attribute("value")
+            except Exception:
+                asin = "MANUAL"
+
+        print(f"🆔 Resolved ASIN: {asin}")
+
+        # Extract specifications / bullets
+        bullets = driver.find_elements(By.CSS_SELECTOR, "#feature-bullets ul li span, #pqv-feature-bullets ul li span")
         specs = " | ".join([b.text.strip() for b in bullets if len(b.text.strip()) > 10][:3])
+        
+        # Extract price safely
         try:
-            price = driver.find_element(By.CSS_SELECTOR, "span.a-price-whole").text
-            price = f"₹{price}"
-        except:
+            price_elem = driver.find_element(By.CSS_SELECTOR, "span.a-price-whole, span.a-offscreen")
+            price = f"₹{price_elem.text.strip()}"
+        except Exception:
             price = "Check Link"
 
         img_paths = []
         thumbs = driver.find_elements(By.CSS_SELECTOR, "#altImages img")
         found = 0
         for idx, img in enumerate(thumbs):
-                if found >= 7: break
+                if found >= 5: break
             
                 # 1. Pull the element attributes
                 alt_text = (img.get_attribute("alt") or "").strip().lower()
