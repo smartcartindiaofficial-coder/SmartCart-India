@@ -345,13 +345,17 @@ def scrape_specific_product(driver, product_url):
         if not name:
             for selector in title_selectors:
                 try:
-                    elem = driver.find_elements(By.CSS_SELECTOR, selector)
+                    elem = driver.find_elements(By.CSS_SELECTOR, "#productTitle, #title, h1.a-size-large, span#productTitle")
                     print(f"element: {elem}")
                     name = elem.text.strip()
                     if name:
                         break
                 except Exception:
                     continue
+
+        if not name:
+            source_code = driver.page_source
+            print(f"source_code: {source_code}")
 
         if not name:
             print("❌ Could not locate product title using standard selectors.")
