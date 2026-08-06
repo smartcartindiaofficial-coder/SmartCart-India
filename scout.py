@@ -343,6 +343,17 @@ def scrape_specific_product(driver, product_url):
                 continue
 
         if not name:
+            for selector in title_selectors:
+                try:
+                    elem = driver.find_elements(By.CSS_SELECTOR, selector)
+                    print(f"element: {elem}")
+                    name = elem.text.strip()
+                    if name:
+                        break
+                except Exception:
+                    continue
+
+        if not name:
             print("❌ Could not locate product title using standard selectors.")
             return None
 
