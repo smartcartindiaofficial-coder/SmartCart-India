@@ -685,37 +685,37 @@ def run_manual_post(url):
         with open(desc_path, "w", encoding="utf-8") as f:
             f.write(description_text)
 
-        # # 7. POST TO PLATFORMS        
-        # # YouTube (API Method - Returns YouTube Link String)
-        # tags = "amazon, deals, india, gadget"
-        # youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text.replace(" - @amazondotin",""), backend_yt_tags)
+        # 7. POST TO PLATFORMS        
+        # YouTube (API Method - Returns YouTube Link String)
+        tags = "amazon, deals, india, gadget"
+        youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text.replace(" - @amazondotin",""), backend_yt_tags)
 
-        # # Pass that exact youtube_url string into your updated uploader module!
-        # insta_uploader.upload_to_instagram(video_path, description_text, '')
+        # Pass that exact youtube_url string into your updated uploader module!
+        insta_uploader.upload_to_instagram(video_path, description_text, '')
 
-        # # # Telegram (Funnel the captured YouTube URL string directly into our layout parameter)
-        # telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url = youtube_url)
+        # # Telegram (Funnel the captured YouTube URL string directly into our layout parameter)
+        telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url = youtube_url)
 
-        # # 8. RECORD HISTORY
-        # record_upload(product['asin'], viral_title)
-        # print(f"✅ Manual Post Complete: {product['asin']}")
+        # 8. RECORD HISTORY
+        record_upload(product['asin'], viral_title)
+        print(f"✅ Manual Post Complete: {product['asin']}")
 
-        # # --- 🌐 NEW LANDING PAGE INTEGRATION LOOP STEP ---
-        # # Fallback cascade to find whatever valid image string your scraper collected
-        # primary_thumbnail = ""
-        # if archived_images and len(archived_images) > 0:
-        #     primary_thumbnail = archived_images[0] # Points to folder/img_0.jpg
+        # --- 🌐 NEW LANDING PAGE INTEGRATION LOOP STEP ---
+        # Fallback cascade to find whatever valid image string your scraper collected
+        primary_thumbnail = ""
+        if archived_images and len(archived_images) > 0:
+            primary_thumbnail = archived_images[0] # Points to folder/img_0.jpg
         
-        # compile_landing_page(
-        #     asin=product['asin'],
-        #     name=viral_title,
-        #     product_url=product_url,
-        #     local_image_path=primary_thumbnail, # Passing the local file path
-        #     price=product.get('price', 'Check Price')
-        # )
+        compile_landing_page(
+            asin=product['asin'],
+            name=viral_title,
+            product_url=product_url,
+            local_image_path=primary_thumbnail, # Passing the local file path
+            price=product.get('price', 'Check Price')
+        )
 
-        # # 🚀 NEW: PUSH UPDATES LIVE TO GITHUB PAGES
-        # sync_landing_page_to_github()
+        # 🚀 NEW: PUSH UPDATES LIVE TO GITHUB PAGES
+        sync_landing_page_to_github()
 
     finally:  
         driver.quit()
