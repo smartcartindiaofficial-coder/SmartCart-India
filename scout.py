@@ -296,12 +296,44 @@ def get_bestsellers(driver, count):
                 except Exception as e:
                     print(f"❌ Download failed for {high_res}: {e}")
 
+            # ─── 📈 NEW OFFER PERCENTAGE EXTRACTION LOGIC ───
+            # We need to capture the exact integer value (e.g., '65' from '65% OFF')
+            offer_percentage = 0
+            offer_scraped = ""
+            
+            # Priority selectors: The inline price widget often contains the true offer
+            # Selector 1: The 'savingPercentage' element, common on deals
+            # Selector 2: General price element with '%' symbol
+            discount_selectors = ["span.savingPercentage", "span.a-size-large.a-color-price", "span#price_inside_buybox_badging_text", "span.reinventPriceSavingsPercentageMargin"]
+            
+            for selector in discount_selectors:
+                try:
+                    elem = driver.find_element(By.CLASS_NAME, "apex-savings-percentage")
+                    text = elem.text.strip()
+                    if '%' in text:
+                        offer_scraped = text
+                        break
+                except Exception:
+                    continue
+    
+            # Use Regex to extract only the integer digits before the percentage symbol
+            if offer_scraped:
+                offer_match = re.search(r'(\d+)\s*%', offer_scraped)
+                if offer_match:
+                    offer_percentage = int(offer_match.group(1))
+                    print(f"📈 [Offer] Scraped {offer_scraped} -> Result: {offer_percentage}")
+            
+            if offer_percentage == 0:
+                print("ℹ️ No prominent offer found on this page.")
+            # ───────────────────────────────────────────
+
             bullets = driver.find_elements(By.CSS_SELECTOR, "#feature-bullets ul li span, #pqv-feature-bullets ul li span")
             specs = " | ".join([b.text.strip() for b in bullets if len(b.text.strip()) > 10][:7])
             
             products.append({
                 "asin": asin, "name": name, "link": f"{link}?tag=smartcart03b-21",
-                "images": img_paths, "specs": specs, "tags": generate_tags(name, specs)
+                "images": img_paths, "specs": specs, "tags": generate_tags(name, specs),
+                "offer_percentage": offer_percentage
             })
             driver.back()
             time.sleep(3)
@@ -355,9 +387,9 @@ def scrape_specific_product(driver, product_url):
             except Exception:
                 continue
 
-        if not name:
-            source_code = driver.page_source
-            print(f"source_code: {source_code}")
+        # if not name:
+        #     source_code = driver.page_source
+        #     print(f"source_code: {source_code}")
 
         if not name:
             print("❌ Could not locate product title using standard selectors.")
@@ -375,6 +407,37 @@ def scrape_specific_product(driver, product_url):
                 asin = "MANUAL"
 
         print(f"🆔 Resolved ASIN: {asin}")
+
+        # ─── 📈 NEW OFFER PERCENTAGE EXTRACTION LOGIC ───
+        # We need to capture the exact integer value (e.g., '65' from '65% OFF')
+        offer_percentage = 0
+        offer_scraped = ""
+        
+        # Priority selectors: The inline price widget often contains the true offer
+        # Selector 1: The 'savingPercentage' element, common on deals
+        # Selector 2: General price element with '%' symbol
+        discount_selectors = ["span.savingPercentage", "span.a-size-large.a-color-price", "span#price_inside_buybox_badging_text", "span.reinventPriceSavingsPercentageMargin"]
+        
+        for selector in discount_selectors:
+            try:
+                elem = driver.find_element(By.CLASS_NAME, "apex-savings-percentage")
+                text = elem.text.strip()
+                if '%' in text:
+                    offer_scraped = text
+                    break
+            except Exception:
+                continue
+
+        # Use Regex to extract only the integer digits before the percentage symbol
+        if offer_scraped:
+            offer_match = re.search(r'(\d+)\s*%', offer_scraped)
+            if offer_match:
+                offer_percentage = int(offer_match.group(1))
+                print(f"📈 [Offer] Scraped {offer_scraped} -> Result: {offer_percentage}")
+        
+        if offer_percentage == 0:
+            print("ℹ️ No prominent offer found on this page.")
+        # ───────────────────────────────────────────
 
         # Extract specifications / bullets
         bullets = driver.find_elements(By.CSS_SELECTOR, "#feature-bullets ul li span, #pqv-feature-bullets ul li span")
@@ -434,7 +497,8 @@ def scrape_specific_product(driver, product_url):
             "link": f"https://www.amazon.in/dp/{asin}?tag={os.getenv('Affiliate_Code')}",
             "price": price,
             "specs": specs,
-            "images": img_paths
+            "images": img_paths,
+            "offer_percentage": offer_percentage  # 🚀 Added parameter
         }
     except Exception as e:
         print(f"❌ Manual Scrape Failed: {e}")

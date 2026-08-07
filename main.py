@@ -452,6 +452,7 @@ def start_daily_routine():
                 continue
             
             for i, item in enumerate(new_products):
+                offer_percentage = 0
                 print(f"✨ Found new product: {item['name'][:50]}...")
                 asin = item.get('asin')
 
@@ -462,6 +463,7 @@ def start_daily_routine():
                 safe_name = item.get('name')
                 specs = item.get('specs', '').replace(" | ","\n-")
                 temp_images = item.get('images', [])
+                offer_percentage = item.get('offer_percentage')
 
                 if not temp_images:
                     print("⚠️ Missing images for this selection. Retrying loop...{i}")
@@ -487,7 +489,8 @@ def start_daily_routine():
 
                 print("🎨 Invoking Dynamic Thumbnail Engine...")
                 generated_thumb_path = thumbnail_engine.generate_thumbnail_multi(
-                    asin=asin, product_name=viral_title, specifications=[], image_paths_list=final_images
+                    asin=asin, product_name=viral_title, specifications=[], image_paths_list=final_images,
+                    offer_percentage=offer_percentage
                 )
                 
                 video_render_images = final_images.copy()
@@ -519,20 +522,20 @@ def start_daily_routine():
                 with open(desc_path, "w", encoding="utf-8") as f:
                     f.write(description_text)
 
-                youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text.replace(" - @amazondotin",""), backend_yt_tags)
-                insta_uploader.upload_to_instagram(video_path, description_text, product_url)
-                telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)                
+                # youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text.replace(" - @amazondotin",""), backend_yt_tags)
+                # insta_uploader.upload_to_instagram(video_path, description_text, product_url)
+                # telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)                
 
-                record_upload(asin, viral_title)
+                # record_upload(asin, viral_title)
 
-                primary_thumbnail = final_images[0] if final_images else ""
-                compile_landing_page(
-                    asin=asin, name=viral_title, product_url=product_url,
-                    local_image_path=primary_thumbnail, price=item.get('price', 'Check Price')
-                )
+                # primary_thumbnail = final_images[0] if final_images else ""
+                # compile_landing_page(
+                #     asin=asin, name=viral_title, product_url=product_url,
+                #     local_image_path=primary_thumbnail, price=item.get('price', 'Check Price')
+                # )
 
-                print("✅ Successfully processed one product. Exiting pool loop.")
-                sync_landing_page_to_github()
+                # print("✅ Successfully processed one product. Exiting pool loop.")
+                # sync_landing_page_to_github()
                 break
                 
         finally:
@@ -629,6 +632,8 @@ def run_manual_post(url):
         print(f"💬 Generated script text: {voice_script}")
         # ───────────────────────────────────────────────────────────
 
+        passed_offer_percentage = product['offer_percentage']
+
         # ─── NEW: GENERATE THE DYNAMIC THUMBNAIL FIRST ───
         print("🎨 Invoking Dynamic Thumbnail Engine to compile video hook frame...")
         # Clean specs array conversion to pass cleanly to the thumbnail cards
@@ -638,7 +643,8 @@ def run_manual_post(url):
             asin=product['asin'],
             product_name=viral_title, # Pass the viral clean name for high-impact typography
             specifications=[],
-            image_paths_list=product['images']
+            image_paths_list=product['images'],
+            offer_percentage=passed_offer_percentage
         )
         
         # If the engine compiles successfully, slide it into the absolute front of the video list
