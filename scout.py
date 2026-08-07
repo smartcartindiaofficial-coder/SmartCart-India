@@ -325,9 +325,22 @@ def scrape_specific_product(driver, product_url):
     wait = WebDriverWait(driver, 30)
 
     try:
-        # Check if Amazon triggered a CAPTCHA / Bot Check page
-        if "captcha" in driver.title.lower() or "robot check" in driver.page_source.lower():
+        page_source = driver.page_source.lower()
+
+        if any(term in page_source for term in ["captcha", "robot check", "validatecaptcha", "continue shopping"]):
             print("⚠️ Amazon presented a CAPTCHA or Anti-Bot check!")
+        
+        # Try clicking the 'Continue shopping' button
+        try:
+            button = driver.find_element(By.CSS_SELECTOR, "button[type='submit'].a-button-text")
+            button.click()
+            time.sleep(10)
+        except Exception as e:
+            print(f"Could not click 'Continue shopping' button: {e}")
+            
+        # Re-verify if we are still on a captcha page
+        if "validatecaptcha" in driver.page_source.lower():
+            print("❌ Still blocked by captcha.")
             return None
 
         # Fallback element checking for Product Title
@@ -341,17 +354,6 @@ def scrape_specific_product(driver, product_url):
                     break
             except Exception:
                 continue
-
-        if not name:
-            for selector in title_selectors:
-                try:
-                    elem = driver.find_elements(By.CSS_SELECTOR, "#productTitle, #title, h1.a-size-large, span#productTitle")
-                    print(f"element: {elem}")
-                    name = elem.text.strip()
-                    if name:
-                        break
-                except Exception:
-                    continue
 
         if not name:
             source_code = driver.page_source
