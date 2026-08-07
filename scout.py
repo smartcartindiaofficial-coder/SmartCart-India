@@ -310,6 +310,7 @@ def get_bestsellers(driver, count):
                 try:
                     elem = driver.find_element(By.CLASS_NAME, "apex-savings-percentage")
                     text = elem.text.strip()
+                    print(f"offer text: {text}")
                     if '%' in text:
                         offer_scraped = text
                         break
