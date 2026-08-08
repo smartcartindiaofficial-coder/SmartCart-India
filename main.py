@@ -60,7 +60,7 @@ CATEGORY_HASHTAGS = {
     "Default": ["#AmazonFinds", "#TrendingGadgets", "#SmartCartIndia", "#ViralProducts", "#DailyDeals","#Amazon", "#Trending", "#Viral", "#Deals","#Gadgets","#Smart"]
 }
 
-def reframe_product_for_youtube(raw_name, raw_specs):
+def reframe_product_for_youtube(raw_name, raw_specs, offer):
     """
     Uses the free, blazing-fast Groq API to analyze complex Amazon
     product details and return highly tailored, viral marketing scripts.
@@ -82,12 +82,14 @@ def reframe_product_for_youtube(raw_name, raw_specs):
 
         PRODUCT NAME: {raw_name}
         SPECIFICATIONS: {raw_specs}
+        Discount percentage: {offer}
 
-        OUTPUT REGULATION: You must return exactly 3 lines of text. Do not add introductions, explanations, or markdown symbols like asterisks.
+        OUTPUT REGULATION: You must return exactly 4 lines of text. Do not add introductions, explanations, or markdown symbols like asterisks and numbers.
 
         Line 1: Punchy Viral Title (Max 5 words, clear, NO technical model numbers).
-        Line 2: Catchy Hook Sentence (0-3 seconds of the video, focuses on an everyday problem or high curiosity, Max 10 words).
-        Line 3: Short Script Body (3-12 seconds of the video, highlights 2 major lifestyle benefits naturally, Min 10 and Max 15 words).
+        Line 2: Catchy Hook Sentence (0-5 seconds of the video, focuses on an everyday problem or high curiosity, Max 10 words).
+        Line 3: Short Script Body (6-20 seconds of the video, highlights 2 major lifestyle benefits naturally and highlighting about the discount offer, Min 15 and Max 20 words).
+        Line 4: Extract only the core Brand and Product Name/Category from the title below in 4 words or fewer. Strip all specs, colors, and marketing fluff, and return ONLY the result: {raw_name}
         """
 
         # Execute high-speed text inference using Llama 3
@@ -114,11 +116,12 @@ def reframe_product_for_youtube(raw_name, raw_specs):
             # Clean up line tags if the AI prints them literally
             hook = lines[1].replace("Line 2:", " ").strip()
             body = lines[2].replace("Line 3:", " ").strip()
+            ProductName = lines[3].replace("Line 4:", " ").strip()
             
             # Combine hook and body into a smooth audio text script for edge_tts to read
             voiceover_script_tmp = f"{hook}@{body} Direct deal link is pinned in the comments below!"
             voiceover_script = re.sub(r'\d+\.\s*', '', voiceover_script_tmp)
-            return viral_title, voiceover_script
+            return viral_title, voiceover_script, ProductName
         else:
             return raw_name[:45], "Check out this trending Amazon asset find right now!"
 
@@ -483,7 +486,7 @@ def start_daily_routine():
                         shutil.move(img, dest)
                         final_images.append(dest)            
                 
-                viral_title, viral_voiceover_script = reframe_product_for_youtube(safe_name, specs)
+                viral_title, viral_voiceover_script, ProductName = reframe_product_for_youtube(safe_name, specs, offer_percentage)
                 voice_script = f"{viral_title}. {viral_voiceover_script}."
                 print(f"💬 Generated script text: {voice_script}")
 
@@ -530,7 +533,7 @@ def start_daily_routine():
 
                 primary_thumbnail = final_images[0] if final_images else ""
                 compile_landing_page(
-                    asin=asin, name=viral_title, product_url=product_url,
+                    asin=asin, name=ProductName, product_url=product_url,
                     local_image_path=primary_thumbnail, price=item.get('price', 'Check Price')
                 )
 
@@ -617,6 +620,7 @@ def run_manual_post(url):
                     print(f"⚠️ Could not move image: {e}")        
 
         product['images'] = archived_images
+        passed_offer_percentage = product['offer_percentage']
 
         if not archived_images:
             print("❌ TERMINATING: No valid product images were successfully scraped from Amazon. Video skipped.")
@@ -625,14 +629,14 @@ def run_manual_post(url):
         # 5. CREATE VIDEO 
         print(f"🎬 Generating Manual Video for: {safe_name[:30]}")
 
-        viral_title, viral_voiceover_script = reframe_product_for_youtube(safe_name, specs)
+        viral_title, viral_voiceover_script, ProductName = reframe_product_for_youtube(safe_name, specs, passed_offer_percentage)
         
         # Construct a high-retention narration voice hook
         voice_script = f"{viral_title}.{viral_voiceover_script}."
         print(f"💬 Generated script text: {voice_script}")
         # ───────────────────────────────────────────────────────────
 
-        passed_offer_percentage = product['offer_percentage']
+        
 
         # ─── NEW: GENERATE THE DYNAMIC THUMBNAIL FIRST ───
         print("🎨 Invoking Dynamic Thumbnail Engine to compile video hook frame...")
@@ -714,7 +718,7 @@ def run_manual_post(url):
         
         compile_landing_page(
             asin=product['asin'],
-            name=viral_title,
+            name=ProductName,
             product_url=product_url,
             local_image_path=primary_thumbnail, # Passing the local file path
             price=product.get('price', 'Check Price')
