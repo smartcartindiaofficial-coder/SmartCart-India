@@ -219,17 +219,14 @@ def compile_landing_page(asin, name, product_url, local_image_path, price, outpu
         github_image_relative_path = "https://via.placeholder.com/150"
     # ────────────────────────────────────────
     
-    clean_title = name.replace('"', "'")[:75] + "..."
+    clean_title = name.replace('"', "'")[:50] + "..."
     
     new_card_html = f"""
         <div class="deal-card" id="card-{asin}">
-            <img class="deal-thumb" src="{github_image_relative_path}" alt="{clean_title}">
+            <img class="deal-thumb" src="{github_image_relative_path}" alt="{clean_title}" loading="lazy">
             <div class="deal-details">
                 <h3 class="deal-title">{clean_title}</h3>
-                <div class="deal-meta">
-                    <span class="deal-price"></span>
-                    <a class="deal-btn" href="{product_url}" target="_blank">Get Deal ➔</a>
-                </div>
+                <a class="deal-btn" href="{product_url}" target="_blank" rel="noopener">Buy on Amazon</a>
             </div>
         </div>
     """
