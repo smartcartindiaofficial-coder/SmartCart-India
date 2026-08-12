@@ -190,7 +190,6 @@ def get_bestsellers(driver, count):
         
         try:
             card = cards[i]
-
             name = card.text.split('\n')[0].strip()
 
             if any(keyword in name for keyword in blacklist):
@@ -213,6 +212,11 @@ def get_bestsellers(driver, count):
             high_res_urls = []
             thumbs = []
 
+            availability = driver.find_element(By.CLASS_NAME, "primary-availability-message").text.strip()            
+            print(f"product availability: {availability}")
+            if 'Currently unavailable' in availability:
+                continue 
+            
             try:
                 # Find all distinct structural image items that have dynamic image configurations
                 image_elements = driver.find_elements(By.XPATH, "//*[@data-a-dynamic-image]")
@@ -299,23 +303,13 @@ def get_bestsellers(driver, count):
             # ─── 📈 NEW OFFER PERCENTAGE EXTRACTION LOGIC ───
             # We need to capture the exact integer value (e.g., '65' from '65% OFF')
             offer_percentage = 0
-            offer_scraped = ""
+            offer_scraped = ""                       
             
-            # Priority selectors: The inline price widget often contains the true offer
-            # Selector 1: The 'savingPercentage' element, common on deals
-            # Selector 2: General price element with '%' symbol
-            discount_selectors = ["span.savingPercentage", "span.a-size-large.a-color-price", "span#price_inside_buybox_badging_text", "span.reinventPriceSavingsPercentageMargin"]
-            
-            for selector in discount_selectors:
-                try:
-                    elem = driver.find_element(By.CLASS_NAME, "apex-savings-percentage")
-                    text = elem.text.strip()
-                    print(f"offer text: {text}")
-                    if '%' in text:
-                        offer_scraped = text
-                        break
-                except Exception:
-                    continue
+            elem = driver.find_element(By.CLASS_NAME, "apex-savings-percentage")
+            text = elem.text.strip()
+            print(f"offer text: {text}")
+            if '%' in text:
+                offer_scraped = text                        
     
             # Use Regex to extract only the integer digits before the percentage symbol
             if offer_scraped:
