@@ -24,8 +24,10 @@ import editor
 import uploader
 import insta_uploader
 import telegram_poster
-import thumbnail_engine 
+import thumbnail_engine
+import pinterest_uploader
 
+from pinterest_uploader import PinterestUploader
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -524,7 +526,26 @@ def start_daily_routine():
 
                 youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text.replace(" - @amazondotin",""), backend_yt_tags)
                 insta_uploader.upload_to_instagram(video_path, description_text, product_url)
-                telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)                
+                telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)
+
+                # video_file = video_path
+                # product_title = viral_title  # generated from Groq LLM
+                # product_desc = description_text  # generated script + hashtags
+                # affiliate_link = os.getenv('Affiliate_Code')  # Amazon affiliate link[cite: 2, 3]
+                # board_id = os.getenv("PINTEREST_BOARD_ID")
+
+                # # 📌 Publish to Pinterest
+                # try:
+                #     pin_bot = PinterestUploader()
+                #     pin_bot.create_video_pin(
+                #         board_id=board_id,
+                #         title=product_title,
+                #         description=product_desc,
+                #         link=affiliate_link,
+                #         video_path=video_file
+                #     )
+                # except Exception as e:
+                #     print(f"⚠️ Pinterest Posting Error: {e}")              
 
                 record_upload(asin, viral_title)
 
