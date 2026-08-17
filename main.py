@@ -102,7 +102,7 @@ def reframe_product_for_youtube(raw_name, raw_specs, offer):
                     "content": prompt,
                 }
             ],
-            model="llama-3.1-8b-instant",  # <--- Changed from llama3-8b-8092
+            model="GPT OSS 20B",  # <--- Changed from llama3-8b-8092
             temperature=0.7,
             max_tokens=250
         )
