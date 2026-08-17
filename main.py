@@ -70,14 +70,11 @@ def reframe_product_for_youtube(raw_name, raw_specs, offer):
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         print("⚠️ Groq API key missing in Config.env! Falling back to raw titles.")
-        # Safe fallback so your automation loop doesn't crash if the key fails to load
-        return raw_name[:45], "Check out this amazing find on Amazon right now!"
+        return raw_name[:45], "Check out this amazing find on Amazon right now!", raw_name[:20]
 
     try:
-        # Initialize the official Groq pipeline client
         client = Groq(api_key=api_key)
         
-        # Craft a strict prompt to make sure it only returns what our pipeline needs
         prompt = f"""
         You are an expert viral marketer for YouTube Shorts and Instagram Reels.
         Analyze the raw product information below and transform it into high-retention content.
@@ -94,7 +91,7 @@ def reframe_product_for_youtube(raw_name, raw_specs, offer):
         Line 4: Extract only the core Brand and Product Name/Category from the title below in 4 words or fewer. Strip all specs, colors, and marketing fluff, and return ONLY the result: {raw_name}
         """
 
-        # Execute high-speed text inference using Llama 3
+        # Execute high-speed text inference
         chat_completion = client.chat.completions.create(
             messages=[
                 {
@@ -102,35 +99,32 @@ def reframe_product_for_youtube(raw_name, raw_specs, offer):
                     "content": prompt,
                 }
             ],
-            model="GPT OSS 20B",  # <--- Changed from llama3-8b-8092
+            model="openai/gpt-oss-20b",
             temperature=0.7,
-            max_tokens=250
+            max_tokens=1000  # <--- Increased token limit to allow room for reasoning + content
         )
 
-        # Parse and clean the output response text
         raw_output = chat_completion.choices[0].message.content.strip()
         lines = [line.strip() for line in raw_output.split('\n') if line.strip()]
 
-        if len(lines) >= 3:
-            # Line 1 becomes the overlay title for your video metadata and cards
-            viral_title = lines[0].replace("Line 1:", " ").replace('"', '').strip()
+        if len(lines) >= 4:
+            viral_title = lines[0].replace("Line 1:", "").replace('"', '').strip()
+            hook = lines[1].replace("Line 2:", "").strip()
+            body = lines[2].replace("Line 3:", "").strip()
+            product_name = lines[3].replace("Line 4:", "").strip()
             
-            # Clean up line tags if the AI prints them literally
-            hook = lines[1].replace("Line 2:", " ").strip()
-            body = lines[2].replace("Line 3:", " ").strip()
-            ProductName = lines[3].replace("Line 4:", " ").strip()
+            voiceover_script_tmp = f"{hook} {body} Direct deal link is pinned in the comments below!"
+            voiceover_script = re.sub(r'^\d+\.\s*', '', voiceover_script_tmp)
             
-            # Combine hook and body into a smooth audio text script for edge_tts to read
-            voiceover_script_tmp = f"{hook}@{body} Direct deal link is pinned in the comments below!"
-            voiceover_script = re.sub(r'\d+\.\s*', '', voiceover_script_tmp)
-            return viral_title, voiceover_script, ProductName
+            return viral_title, voiceover_script, product_name
         else:
-            return raw_name[:45], "Check out this trending Amazon asset find right now!"
+            # Always return 3 elements to prevent unpacking crashes
+            return raw_name[:45], "Check out this trending Amazon asset find right now!", raw_name[:20]
 
     except Exception as e:
         print(f"❌ Groq API Processing Failure: {e}")
-        fallback_script = "Check out this amazing find on Amazon right now! @ Click the link below to view current pricing and specs."
-        return raw_name[:45], fallback_script
+        fallback_script = "Check out this amazing find on Amazon right now! Click the link below to view current pricing and specs."
+        return raw_name[:45], fallback_script, raw_name[:20]
 
 def get_crisp_catchy_title(raw_name):
     """

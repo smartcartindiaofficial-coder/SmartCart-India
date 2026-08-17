@@ -96,7 +96,6 @@ CATEGORIES = {
     "TV Receivers": "https://www.amazon.in/gp/bestsellers/electronics/1389392031/ref=zg_bs_nav_electronics_2_1389375031",
     "Televisions": "https://www.amazon.in/gp/bestsellers/electronics/1389396031/ref=zg_bs_nav_electronics_2_1389375031",
     "Video Glasses": "https://www.amazon.in/gp/bestsellers/electronics/1389397031/ref=zg_bs_nav_electronics_2_1389375031",
-    "Video Players & Recorders": "https://www.amazon.in/gp/bestsellers/electronics/1389398031/ref=zg_bs_nav_electronics_2_1389375031",
     "Mobile Accessories": "https://www.amazon.in/gp/bestsellers/electronics/1389402031/ref=zg_bs_nav_electronics_2_92071051031",
     "Smartphones & Basic Mobiles": "https://www.amazon.in/gp/bestsellers/electronics/1389432031/ref=zg_bs_nav_electronics_2_92071051031",
     "Tablet Accessories": "https://www.amazon.in/gp/bestsellers/electronics/1375328031/ref=zg_bs_nav_electronics_2_92071051031",
