@@ -69,10 +69,10 @@ jobs:
         python main.py
 
     # 6. Cleanup Assets older than 30 days
-    - name: Clean Old Assets (30+ days)
+    - name: Clean Old Assets (180+ days)
       run: |
         if [ -d "assets" ]; then
-          CUTOFF=$(date -d '30 days ago' +%s)
+          CUTOFF=$(date -d '180 days ago' +%s)
           
           find assets -type f | while read -r file; do
             LAST_COMMIT=$(git log -1 --format="%ct" -- "$file")
