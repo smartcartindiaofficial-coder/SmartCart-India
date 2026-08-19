@@ -149,6 +149,9 @@ def upload_to_instagram(local_video_path, description_text, buy_link):
         published_media_id = publish_res.get('id')
         if published_media_id:
             print(f"🚀 SUCCESS: Reel is officially live on Instagram! ID: {published_media_id}")
+
+            dynamic_filename = os.path.basename(local_video_path)
+            delete_from_supabase(dynamic_filename)
             
             # Step 4: Drop First Comment (Affiliate Link)
             try:
@@ -170,3 +173,12 @@ def upload_to_instagram(local_video_path, description_text, buy_link):
     except Exception as e:
         print(f"❌ Instagram Graph API Error: {e}")
         return None
+
+def delete_from_supabase(filename):
+    """Deletes a temporary file from Supabase Storage once Meta ingestion completes."""
+    try:
+        supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        res = supabase.storage.from_(BUCKET_NAME).remove([filename])
+        print(f"🗑️ Cleaned up temporary asset from Supabase: {filename}")
+    except Exception as e:
+        print(f"⚠️ Non-critical: Could not delete {filename} from Supabase: {e}")

@@ -713,7 +713,7 @@ def run_manual_post(url):
         youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text.replace(" - @amazondotin",""), backend_yt_tags)
 
         # Pass that exact youtube_url string into your updated uploader module!
-        insta_uploader.upload_to_instagram(video_path, description_text, '')
+        insta_uploader.upload_to_instagram(video_path, description_text, product_url)
 
         # # Telegram (Funnel the captured YouTube URL string directly into our layout parameter)
         telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url = youtube_url)
