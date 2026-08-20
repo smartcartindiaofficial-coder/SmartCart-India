@@ -68,7 +68,7 @@ jobs:
         echo "$TOKEN_BASE64" | base64 --decode > token.pickle
         python main.py
 
-    # 6. Cleanup Assets older than 30 days
+    # 6. Cleanup Assets older than 180 days
     - name: Clean Old Assets (180+ days)
       run: |
         if [ -d "assets" ]; then
