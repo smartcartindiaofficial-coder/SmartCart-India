@@ -26,6 +26,7 @@ import insta_uploader
 import telegram_poster
 import thumbnail_engine
 import pinterest_uploader
+from whatsapp_publisher import post_to_whatsapp_channel
 
 from pinterest_uploader import PinterestUploader
 from selenium import webdriver
@@ -521,6 +522,7 @@ def start_daily_routine():
                 youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text.replace(" - @amazondotin",""), backend_yt_tags)
                 insta_uploader.upload_to_instagram(video_path, description_text, product_url)
                 telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url=youtube_url)
+                # post_to_whatsapp_channel(video_path, description_text)
 
                 # video_file = video_path
                 # product_title = viral_title  # generated from Groq LLM
@@ -707,26 +709,21 @@ def run_manual_post(url):
         with open(desc_path, "w", encoding="utf-8") as f:
             f.write(description_text)
 
-        # 7. POST TO PLATFORMS        
-        # YouTube (API Method - Returns YouTube Link String)
         tags = "amazon, deals, india, gadget"
         youtube_url = uploader.upload_to_youtube(None, video_path, viral_title, description_text.replace(" - @amazondotin",""), backend_yt_tags)
 
-        # Pass that exact youtube_url string into your updated uploader module!
         insta_uploader.upload_to_instagram(video_path, description_text, product_url)
 
-        # # Telegram (Funnel the captured YouTube URL string directly into our layout parameter)
         telegram_poster.post_to_telegram(viral_title, product_url, video_path, youtube_url = youtube_url)
 
-        # 8. RECORD HISTORY
+        # post_to_whatsapp_channel(video_path, description_text)
+
         record_upload(product['asin'], viral_title)
         print(f"✅ Manual Post Complete: {product['asin']}")
 
-        # --- 🌐 NEW LANDING PAGE INTEGRATION LOOP STEP ---
-        # Fallback cascade to find whatever valid image string your scraper collected
         primary_thumbnail = ""
         if archived_images and len(archived_images) > 0:
-            primary_thumbnail = archived_images[0] # Points to folder/img_0.jpg
+            primary_thumbnail = archived_images[0]
         
         compile_landing_page(
             asin=product['asin'],

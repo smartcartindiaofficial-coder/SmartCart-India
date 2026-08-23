@@ -355,15 +355,7 @@ def scrape_specific_product(driver, product_url):
 
         if any(term in page_source for term in ["captcha", "robot check", "validatecaptcha", "continue shopping"]):
             print("⚠️ Amazon presented a CAPTCHA or Anti-Bot check!")
-        
-        # Try clicking the 'Continue shopping' button
-        try:
-            button = driver.find_element(By.CSS_SELECTOR, "button[type='submit'].a-button-text")
-            button.click()
-            time.sleep(10)
-        except Exception as e:
-            print(f"Could not click 'Continue shopping' button: {e}")
-            
+                    
         # Re-verify if we are still on a captcha page
         if "validatecaptcha" in driver.page_source.lower():
             print("❌ Still blocked by captcha.")
