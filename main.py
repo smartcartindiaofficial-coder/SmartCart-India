@@ -796,5 +796,5 @@ if __name__ == "__main__":
     if not processed_manual:
         start_daily_routine()
     
-    # manual_url = "https://www.amazon.in/dp/B0797MY6JB"
+    # manual_url = "https://www.amazon.in/dp/B08F38HSMN"
     # run_manual_post(manual_url)
