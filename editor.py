@@ -284,14 +284,14 @@ def create_pro_video(image_paths, product_name, output_path, voice_text=None):
 
     time.sleep(random.randint(5, 15))
 
-    if voice_text and generate_voiceover(voice_text, temp_tts_path):
-        try:
-            temp_audio = AudioFileClip(temp_tts_path)
-            total_duration = min(int(temp_audio.duration) + 1, 58) 
-            temp_audio.close()
-            has_voice = True
-        except Exception as audio_prep_err:
-            print(f"⚠️ Could not parse audio track dimensions: {audio_prep_err}")
+    # if voice_text and generate_voiceover(voice_text, temp_tts_path):
+    #     try:
+    #         temp_audio = AudioFileClip(temp_tts_path)
+    #         total_duration = min(int(temp_audio.duration) + 1, 58) 
+    #         temp_audio.close()
+    #         has_voice = True
+    #     except Exception as audio_prep_err:
+    #         print(f"⚠️ Could not parse audio track dimensions: {audio_prep_err}")
 
     fps = 24
     outro_duration = 3  
