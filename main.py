@@ -793,8 +793,8 @@ if __name__ == "__main__":
     processed_manual = process_manual_queue("manual_urls.txt")
 
     # 2. If no manual URL was present, run the normal daily routine
-    # if not processed_manual:
-    #     start_daily_routine()
+    if not processed_manual:
+        start_daily_routine()
     
-    manual_url = "https://www.amazon.in/dp/B0F5MS7BWR"
-    run_manual_post(manual_url)
+    # manual_url = "https://www.amazon.in/dp/B0F5MS7BWR"
+    # run_manual_post(manual_url)
