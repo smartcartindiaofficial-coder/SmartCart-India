@@ -514,7 +514,7 @@ def create_pro_video(image_paths, product_name, output_path, voice_text=None):
                     else:
                         bg_music_clip = bg_music_clip.transform(duck_filter)
                 else:
-                    bg_music_clip = bg_music_clip.volumex(0.12) if hasattr(bg_music_clip, "volumex") else bg_music_clip.multiply_volume(0.12)
+                    bg_music_clip = bg_music_clip.volumex(0.12) if hasattr(bg_music_clip, "volumex") else bg_music_clip.volumex(0.12)
                     
                 audio_layers.append(bg_music_clip)
 
