@@ -5,6 +5,7 @@ import numpy as np
 import asyncio
 import edge_tts
 import nest_asyncio
+import time
 
 try:
     # Try importing using the newer MoviePy v2.x structure
@@ -280,6 +281,8 @@ def create_pro_video(image_paths, product_name, output_path, voice_text=None):
     temp_tts_path = output_path.replace(".mp4", "_voiceover.mp3")
     has_voice = False
     total_duration = 15  
+
+    time.sleep(random.randint(5, 15))
 
     if voice_text and generate_voiceover(voice_text, temp_tts_path):
         try:
