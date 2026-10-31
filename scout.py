@@ -78,7 +78,6 @@ CATEGORIES = {
     "Radios & Boomboxes": "https://www.amazon.in/gp/bestsellers/electronics/1389343031/ref=zg_bs_nav_electronics_2_1389335031",
     "Receivers & Separates": "https://www.amazon.in/gp/bestsellers/electronics/1389349031/ref=zg_bs_nav_electronics_2_1389335031",
     "Speakers": "https://www.amazon.in/gp/bestsellers/electronics/1389365031/ref=zg_bs_nav_electronics_2_1389335031",
-    "AV Receivers & Amplifiers": "https://www.amazon.in/gp/bestsellers/electronics/1389376031/ref=zg_bs_nav_electronics_2_1389375031",
     "Accessories": "https://www.amazon.in/gp/bestsellers/electronics/1389377031/ref=zg_bs_nav_electronics_2_1389375031",
     "Home Theater Systems": "https://www.amazon.in/gp/bestsellers/electronics/1389387031/ref=zg_bs_nav_electronics_2_1389375031",
     "Media Streaming Devices": "https://www.amazon.in/gp/bestsellers/electronics/1389339031/ref=zg_bs_nav_electronics_2_1389375031",
