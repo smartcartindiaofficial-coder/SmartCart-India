@@ -30,7 +30,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.11'
         cache: 'pip' # Speeds up installations on subsequent runs
 
     # 3. Install core system video encoders (FFmpeg) and Chrome for scraping
