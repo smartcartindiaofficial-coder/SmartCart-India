@@ -1,122 +1,113 @@
+"""
+telegram_poster.py - posts the video/photo/text to your Telegram channel (free Bot API).
+
+Changes vs the old version
+  * No more crash at import when the token is missing (it only fails when you post).
+  * Plain `requests` only (no pyTelegramBotAPI needed). The old "Retry" adapter never
+    retried POST requests; this has a real retry loop for connect errors / 429 / 5xx.
+  * A read-timeout is NOT retried, so you don't get duplicate posts when Telegram
+    actually received the video but the reply was slow.
+  * Product name and link are HTML-escaped (a '&' or '<' used to break the post).
+  * Affiliate disclosure added to the caption; stray debug print removed.
+  * Videos over the Bot API's 50 MB limit fall back to a text post with the link.
+"""
 import os
-import telebot
+import html
+import time
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util import Retry
-from telebot import apihelper
 from dotenv import load_dotenv
 
-# ─── FORCE ROOT FOLDER PATH LOOKUP FOR TELEGRAM ───
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ENV_PATH = os.path.join(SCRIPT_DIR, 'Config.env')
-load_dotenv(ENV_PATH)
+load_dotenv(os.path.join(SCRIPT_DIR, "Config.env"))
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
+API = "https://api.telegram.org/bot{token}/{method}"
 
-if not BOT_TOKEN:
-    raise ValueError(
-        f"❌ Critical Config Error: 'TELEGRAM_BOT_TOKEN' was not found in your environment!\n"
-        f"The script searched explicitly inside: {ENV_PATH}\n"
-        f"Please verify your file placement and ensure the key name matches exactly."
-    )
+MAX_VIDEO_BYTES = 50 * 1024 * 1024  # Bot API upload limit
+CONNECT_TIMEOUT = 60
+READ_TIMEOUT = 600
+DISCLOSURE = "As an Amazon Associate I earn from qualifying purchases."
 
-# Maximize internal pyTelegramBotAPI limits to give slow handshakes breathing room
-apihelper.CONNECT_TIMEOUT = 120
-apihelper.READ_TIMEOUT = 120
 
-bot = telebot.TeleBot(BOT_TOKEN)
-
-def post_to_telegram(product_name, product_link, media_path, youtube_url=None, price="Check Website"):
-    """
-    Sends the video/image to Telegram with a professional caption formatted in clean HTML.
-    Bypasses ConnectTimeoutError and ISP restrictions via a dual-engine fallback system.
-    """
-    
-    # 1. Build the caption text block using standard HTML tags
-    caption = f"📦 <b>{product_name}</b>\n\n"
-    
+def _build_caption(product_name, product_link, youtube_url, price):
+    caption = f"📦 <b>{html.escape(product_name)}</b>\n\n"
     if youtube_url:
-        caption += f"🎬 <b>Watch on YouTube Shorts (Like & Subscribe!):</b>\n{youtube_url}\n\n"
-        
+        caption += f"🎬 <b>Watch on YouTube Shorts:</b>\n{html.escape(youtube_url)}\n\n"
+    if price:
+        caption += f"💰 <b>Price:</b> {html.escape(str(price))}\n"
     caption += (
-        f"💰 <b>Price:</b> {price}\n"
-        f"🔗 <a href='{product_link}'>Click Here to Buy on Amazon</a>\n\n"
-        f"#AmazonFinds #SmartCartIndia #Deals"
+        f"🔗 <a href=\"{html.escape(product_link, quote=True)}\">Click here to buy on Amazon</a>\n\n"
+        f"<i>{DISCLOSURE}</i>\n\n"
+        "#AmazonFinds #SmartCartIndia #Deals"
     )
-    
-    try:
-        if os.path.exists(media_path):
-            # Check if it's a video or image
-            if media_path.endswith(('.mp4', '.mov')):
-                print(f"🔄 Initializing deep-buffered upload stream for video: {os.path.basename(media_path)}...")
-                
-                try:
-                    # Setup custom pool size and aggressive connection retry adapters
-                    session = requests.Session()
-                    retries = Retry(
-                        total=5, 
-                        backoff_factor=3, # Increased backoff spacing to let local network spikes settle
-                        status_forcelist=[500, 502, 503, 504, 408],
-                        raise_on_status=False
-                    )
-                    
-                    adapter = HTTPAdapter(pool_connections=15, pool_maxsize=15, max_retries=retries)
-                    session.mount('https://', adapter)
-                    
-                    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo"
-                    
-                    with open(media_path, 'rb') as video_file:
-                        payload = {
-                            'chat_id': CHANNEL_ID,
-                            'caption': caption,
-                            'parse_mode': 'HTML'
-                        }
-                        files = {
-                            'video': (os.path.basename(media_path), video_file, 'video/mp4')
-                        }
-                        
-                        # UPGRADE: Raised initial connection handshake allowance to 90 seconds
-                        response = session.post(url, data=payload, files=files, timeout=(90, 600))
-                        
-                    if response.status_code == 200:
-                        print(f"🚀 Video post successful for: {product_name[:20]}")
-                        return True
-                    else:
-                        print(f"⚠️ Primary Stream engine rejected ({response.status_code}). Triggering backup engine...")
-                        raise requests.exceptions.RequestException()
-                    
-                    print(f"⚠️ Chandu")
-                        
-                except Exception as stream_err:
-                    print(f"⚠️ Primary Stream failed due to local ISP network blocks. Engaging Emergency Fallback Wrapper...")
-                    # EMERGENCY FALLBACK: Uses telebot's native internal worker if custom request session gets blocked
-                    with open(media_path, 'rb') as fallback_video:
-                        bot.send_video(
-                            CHANNEL_ID,
-                            fallback_video,
-                            caption=caption,
-                            parse_mode="HTML",
-                            timeout=300
-                        )
-                    print(f"🚀 Video post successful via Emergency Backup Engine for: {product_name[:20]}")
-                    return True
-            else:
-                # Photos processing
-                with open(media_path, 'rb') as photo:
-                    bot.send_photo(
-                        CHANNEL_ID, 
-                        photo, 
-                        caption=caption, 
-                        parse_mode="HTML"   
-                    )
-                print(f"🚀 Photo post successful for: {product_name[:20]}")
-                return True
-        else:
-            # Fallback to text only if media is missing
-            bot.send_message(CHANNEL_ID, caption, parse_mode="HTML")
-            return True
+    return caption[:1024]  # Telegram caption limit for media
 
-    except Exception as e:
-        print(f"❌ Telegram Media Error: {e}")
+
+def _send(method, data, file_field=None, file_path=None, retries=3):
+    """POST to the Bot API. Returns True on success."""
+    url = API.format(token=BOT_TOKEN, method=method)
+    for attempt in range(1, retries + 1):
+        try:
+            if file_path:
+                with open(file_path, "rb") as fh:
+                    resp = requests.post(
+                        url, data=data,
+                        files={file_field: (os.path.basename(file_path), fh)},
+                        timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
+                    )
+            else:
+                resp = requests.post(url, data=data, timeout=(CONNECT_TIMEOUT, 60))
+
+            if resp.status_code == 200:
+                return True
+            if resp.status_code == 429:
+                wait = int(resp.json().get("parameters", {}).get("retry_after", 5))
+                print(f"⏳ Telegram rate limit; waiting {wait}s...")
+                time.sleep(wait + 1)
+                continue
+            if resp.status_code >= 500:
+                print(f"⚠️ Telegram server error {resp.status_code} (attempt {attempt}/{retries}).")
+                time.sleep(3 * attempt)
+                continue
+            print(f"❌ Telegram rejected the request ({resp.status_code}): {resp.text[:300]}")
+            return False  # 4xx: retrying won't help
+        except requests.exceptions.ReadTimeout:
+            print("⚠️ Telegram read-timeout: the post MAY have been delivered. Not retrying (avoids duplicates).")
+            return False
+        except (requests.exceptions.ConnectionError, requests.exceptions.ConnectTimeout) as e:
+            print(f"⚠️ Telegram connection problem (attempt {attempt}/{retries}): {e}")
+            time.sleep(3 * attempt)
+    return False
+
+
+def post_to_telegram(product_name, product_link, media_path, youtube_url=None, price=None):
+    """Send video / photo / text. Returns True on success, False on failure."""
+    if not BOT_TOKEN or not CHANNEL_ID:
+        print("❌ TELEGRAM_BOT_TOKEN / TELEGRAM_CHANNEL_ID missing in Config.env.")
         return False
+
+    caption = _build_caption(product_name, product_link, youtube_url, price)
+    base = {"chat_id": CHANNEL_ID, "parse_mode": "HTML"}
+    media_ok = bool(media_path) and os.path.exists(media_path)
+    ext = os.path.splitext(media_path or "")[1].lower()
+
+    if media_ok and ext in (".mp4", ".mov"):
+        if os.path.getsize(media_path) <= MAX_VIDEO_BYTES:
+            print(f"📤 Telegram: uploading video {os.path.basename(media_path)}...")
+            if _send("sendVideo", {**base, "caption": caption, "supports_streaming": "true"}, "video", media_path):
+                print(f"🚀 Telegram video posted: {product_name[:30]}")
+                return True
+            return False
+        print("⚠️ Video is over Telegram's 50 MB limit - posting text with the link instead.")
+    elif media_ok and ext in (".jpg", ".jpeg", ".png"):
+        if _send("sendPhoto", {**base, "caption": caption}, "photo", media_path):
+            print(f"🚀 Telegram photo posted: {product_name[:30]}")
+            return True
+        return False
+
+    # text-only fallback (no media, or media too large)
+    if _send("sendMessage", {**base, "text": caption, "disable_web_page_preview": "false"}):
+        print(f"🚀 Telegram text post sent: {product_name[:30]}")
+        return True
+    return False

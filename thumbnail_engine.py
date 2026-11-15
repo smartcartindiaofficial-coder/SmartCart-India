@@ -1,17 +1,39 @@
+"""
+thumbnail_engine.py - builds the 1080x1920 "poster" thumbnail (hook frame + cover).
+
+Changes vs the old version
+  * rembg (background removal) is imported lazily and its model is loaded ONCE
+    per run. If rembg or its ~170 MB model download is unavailable, the poster is
+    still built from the original photo instead of failing (main.py used to lose
+    the whole thumbnail). Set REMBG_MODEL=u2netp for a much smaller/faster model.
+  * Fonts: downloaded at most once per run, only the one needed; if the download
+    fails it falls back to common system fonts (DejaVu/Liberation/Arial) and only
+    then to Pillow's default - the old fallback was `arial.ttf`, which does not
+    exist on Linux/GitHub Actions, giving tiny unreadable text. Best fix: commit
+    the three .ttf files into a `fonts/` folder next to this file.
+  * The offer badge is now truly centred (the old code used `text_w // 4` and a
+    float divisor hack) and its font size is measured on the real 2-line text.
+  * Vignette blur runs at quarter size (radius-260 blur on a full frame was the
+    slowest step); text gradient is built with numpy instead of 1920 line draws.
+  * Colour theme uses numpy (Image.getdata is deprecated in newer Pillow).
+  * offer_percentage=None no longer crashes.
+The public function generate_thumbnail_multi(...) is unchanged.
+"""
 import os
 import io
-import re
 import math
 import random
+from functools import lru_cache
+
+import numpy as np
 import requests
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from dotenv import load_dotenv
-from rembg import remove
 
-# Load environment configurations
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ENV_PATH = os.path.join(SCRIPT_DIR, 'Config.env')
-load_dotenv(ENV_PATH)
+load_dotenv(os.path.join(SCRIPT_DIR, "Config.env"))
+
+CANVAS_W, CANVAS_H = 1080, 1920
 
 # ─── RADIAL BACKGROUND SHAPE GENERATORS ───
 
@@ -188,394 +210,295 @@ def draw_alternating_rhombuses(canvas_size, num_shapes=8, base_opacity=25):
 # ─── CORE THEME ENGINE ───
 
 def extract_dominant_theme_from_image(product_layer, product_name):
-    """Extracts product color profiles, sets gradient palettes, and randomly assigns styles."""
-    small_img = product_layer.resize((50, 50))
-    pixels = list(small_img.getdata())
-    valid_pixels = [p for p in pixels if len(p) == 4 and p[3] > 220]
-    
-    if not valid_pixels:
+    """Extracts product colour profile, builds gradient palette, randomly assigns styles."""
+    arr = np.asarray(product_layer.resize((50, 50)).convert("RGBA"))
+    valid = arr[arr[:, :, 3] > 220][:, :3]
+    if len(valid) == 0:
         avg_r, avg_g, avg_b = 20, 24, 30
     else:
-        avg_r = sum(p[0] for p in valid_pixels) // len(valid_pixels)
-        avg_g = sum(p[1] for p in valid_pixels) // len(valid_pixels)
-        avg_b = sum(p[2] for p in valid_pixels) // len(valid_pixels)
+        avg_r, avg_g, avg_b = (int(v) for v in valid.mean(axis=0))
 
     bg_base = (max(10, avg_r // 6), max(10, avg_g // 6), max(10, avg_b // 6), 255)
     bg_glow = (min(255, int(avg_r * 0.5)), min(255, int(avg_g * 0.5)), min(255, int(avg_b * 0.5)), 255)
 
     max_channel = max(bg_glow[0], bg_glow[1], bg_glow[2], 1)
     scale_factor = 230 / max_channel if max_channel < 180 else 1.2
-    
-    gradient_top = (
-        min(255, int(bg_glow[0] * scale_factor + 10)),
-        min(255, int(bg_glow[1] * scale_factor + 10)),
-        min(255, int(bg_glow[2] * scale_factor + 10)),
-        255
-    )
-    gradient_bottom = (255, 255, 255, 255) 
-
-    # Randomized layout pools
-    font_options = ["IMPACT_BEBAS", "TECH_MONTSERRAT", "CREATIVE_POPPINS"]
-    bg_options = ["rays", "radial_dots", "alternating_waves", "squares", "ovals", "rhombuses"]
-
-    font_style = random.choice(font_options)
-    bg_style = random.choice(bg_options)
+    gradient_top = tuple(min(255, int(c * scale_factor + 10)) for c in bg_glow[:3]) + (255,)
+    gradient_bottom = (255, 255, 255, 255)
 
     return {
         "bg_base": bg_base,
         "bg_glow": bg_glow,
         "gradient_top": gradient_top,
         "gradient_bottom": gradient_bottom,
-        "font_style": font_style,
-        "bg_style": bg_style
+        "font_style": random.choice(["IMPACT_BEBAS", "TECH_MONTSERRAT", "CREATIVE_POPPINS"]),
+        "bg_style": random.choice(["rays", "radial_dots", "alternating_waves", "squares", "ovals", "rhombuses"]),
     }
+
+
+# ─── FONTS ───
+
+FONT_DIR = os.path.join(SCRIPT_DIR, "fonts")
+FONT_URLS = {
+    "Montserrat-Black.ttf": "https://github.com/google/fonts/raw/main/ofl/montserrat/Montserrat-Black.ttf",
+    "Poppins-Bold.ttf": "https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Bold.ttf",
+    "BebasNeue-Regular.ttf": "https://github.com/google/fonts/raw/main/ofl/bebasneue/BebasNeue-Regular.ttf",
+}
+FONT_STYLE_FILES = {
+    "IMPACT_BEBAS": "BebasNeue-Regular.ttf",
+    "TECH_MONTSERRAT": "Montserrat-Black.ttf",
+    "CREATIVE_POPPINS": "Poppins-Bold.ttf",
+}
+SYSTEM_FONT_FALLBACKS = [
+    "arialbd.ttf", "arial.ttf",
+    "DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+]
+_download_attempted = set()
+
 
 def download_and_get_fonts(font_style):
-    font_dir = os.path.join(SCRIPT_DIR, "fonts")
-    os.makedirs(font_dir, exist_ok=True)
-    
-    font_urls = {
-        "Montserrat-Black.ttf": "https://github.com/google/fonts/raw/main/ofl/montserrat/Montserrat-Black.ttf",
-        "Poppins-Bold.ttf": "https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-Bold.ttf",
-        "BebasNeue-Regular.ttf": "https://github.com/google/fonts/raw/main/ofl/bebasneue/BebasNeue-Regular.ttf"
-    }
-    
-    for name, url in font_urls.items():
-        p = os.path.join(font_dir, name)
-        if os.path.exists(p) and os.path.getsize(p) == 0:
-            os.remove(p)
-        if not os.path.exists(p):
-            try:
-                r = requests.get(url, timeout=10)
-                if r.status_code == 200:
-                    with open(p, "wb") as f: f.write(r.content)
-            except Exception: pass
+    """Path of the font for this style, downloading it once if it is missing."""
+    os.makedirs(FONT_DIR, exist_ok=True)
+    filename = FONT_STYLE_FILES.get(font_style, FONT_STYLE_FILES["CREATIVE_POPPINS"])
+    path = os.path.join(FONT_DIR, filename)
+    if os.path.exists(path) and os.path.getsize(path) == 0:
+        os.remove(path)
+    if not os.path.exists(path) and filename not in _download_attempted:
+        _download_attempted.add(filename)
+        try:
+            r = requests.get(FONT_URLS[filename], timeout=10)
+            if r.status_code == 200 and len(r.content) > 1000:
+                with open(path, "wb") as f:
+                    f.write(r.content)
+        except Exception as e:
+            print(f"⚠️ Font download failed ({filename}): {e}. Falling back to system fonts.")
+    return path
 
-    style_map = {
-        "IMPACT_BEBAS": "BebasNeue-Regular.ttf",
-        "TECH_MONTSERRAT": "Montserrat-Black.ttf",
-        "CREATIVE_POPPINS": "Poppins-Bold.ttf"
-    }
-    t_file = style_map.get(font_style, style_map["CREATIVE_POPPINS"])
-    return os.path.join(font_dir, t_file)
 
+@lru_cache(maxsize=64)
 def safe_load_font(font_path, size):
     if font_path and os.path.exists(font_path) and os.path.getsize(font_path) > 0:
-        try: return ImageFont.truetype(font_path, size)
-        except IOError: pass
-    for fallback in ["arialbd.ttf", "arial.ttf", "sans-serif"]:
-        try: return ImageFont.truetype(fallback, size)
-        except IOError: continue
-    return ImageFont.load_default()
+        try:
+            return ImageFont.truetype(font_path, size)
+        except OSError:
+            pass
+    for fallback in SYSTEM_FONT_FALLBACKS:
+        try:
+            return ImageFont.truetype(fallback, size)
+        except OSError:
+            continue
+    try:
+        return ImageFont.load_default(size=size)  # Pillow >= 10.1: scalable default font
+    except TypeError:
+        return ImageFont.load_default()
+
 
 def wrap_text_to_lines(text, font, max_width):
-    words = text.split(' ')
-    lines = []
-    current_line = []
-    for word in words:
-        test_line = ' '.join(current_line + [word])
-        bbox = font.getbbox(test_line)
+    lines, current = [], []
+    for word in text.split(" "):
+        test = " ".join(current + [word])
+        bbox = font.getbbox(test)
         if (bbox[2] - bbox[0]) <= max_width:
-            current_line.append(word)
+            current.append(word)
         else:
-            if current_line: lines.append(' '.join(current_line))
-            current_line = [word]
-    if current_line: lines.append(' '.join(current_line))
+            if current:
+                lines.append(" ".join(current))
+            current = [word]
+    if current:
+        lines.append(" ".join(current))
     return lines
 
-def draw_gradient_text_block_with_3d_shadow(bg_canvas, text, position, font_path, max_width, top_color, bottom_color, shadow_color=(0, 0, 0, 255), offset=(12, 14)):
-    """Renders a single center-aligned text block utilizing a deep 3D offset shadow with full canvas gradient mapping."""
-    current_size = 125
-    lines = []
-    font = None
-    line_height = 0
-    
-    while current_size >= 50:
-        font = safe_load_font(font_path, current_size)
+
+def _vertical_gradient(size, y0, y1, top, bottom):
+    """RGBA image whose colour blends top->bottom between rows y0..y1 (numpy, no per-row loop)."""
+    w, h = size
+    f = np.clip((np.arange(h, dtype=np.float32) - y0) / max(1, (y1 - y0)), 0.0, 1.0)[:, None]
+    col = np.array(top, dtype=np.float32) + (np.array(bottom, dtype=np.float32) - np.array(top, dtype=np.float32)) * f
+    return Image.fromarray(np.repeat(col[:, None, :], w, axis=1).astype(np.uint8), "RGBA")
+
+
+def draw_gradient_text_block_with_3d_shadow(bg_canvas, text, position, font_path, max_width, top_color, bottom_color,
+                                            shadow_color=(0, 0, 0, 255), offset=(12, 14)):
+    """Centre-aligned title with a deep 3D shadow and a top->bottom colour gradient."""
+    size = 125
+    while True:
+        font = safe_load_font(font_path, size)
         lines = wrap_text_to_lines(text, font, max_width)
         bbox_sample = font.getbbox("XYgq")
         line_height = (bbox_sample[3] - bbox_sample[1]) + 15
-        if current_size * len(lines) <= 360:
+        if size * len(lines) <= 360 or size <= 50:
             break
-        current_size -= 4
+        size -= 4
 
-    canvas_draw = ImageDraw.Draw(bg_canvas)
+    draw = ImageDraw.Draw(bg_canvas)
     start_x, start_y = position
     off_x, off_y = offset
-    
-    # FIX: Initialize mask layout tracking layer to match full main canvas dimensions (1080x1920)
-    mask_layer = Image.new("L", bg_canvas.size, 0)
-    m_draw = ImageDraw.Draw(mask_layer)
-    
+    mask = Image.new("L", bg_canvas.size, 0)
+    mask_draw = ImageDraw.Draw(mask)
+
     for i, line in enumerate(lines):
-        line_bbox = font.getbbox(line)
-        line_width = line_bbox[2] - line_bbox[0]
-        center_offset_x = (max_width - line_width) // 2
-        
-        lx = start_x + center_offset_x
-        ly = start_y + (i * line_height)
-        
-        # 3D Shadow drop
-        canvas_draw.text((lx + off_x, ly + off_y), line, fill=shadow_color, font=font)
-        # Record font silhouette shape metrics inside full canvas space
-        m_draw.text((lx, ly), line, fill=255, font=font)
+        bbox = font.getbbox(line)
+        lx = start_x + (max_width - (bbox[2] - bbox[0])) // 2
+        ly = start_y + i * line_height
+        draw.text((lx + off_x, ly + off_y), line, fill=shadow_color, font=font)  # 3D shadow
+        mask_draw.text((lx, ly), line, fill=255, font=font)                      # text silhouette
 
-    # FIX: Structural full-frame canvas gradient mapping brush
-    gradient_brush = Image.new("RGBA", bg_canvas.size)
-    g_draw = ImageDraw.Draw(gradient_brush)
-    
-    # Calculate gradient limits specifically around the vertical footprint of the text block
-    total_text_height = line_height * len(lines)
-    grad_start_y = start_y
-    grad_end_y = start_y + total_text_height
-    
-    for y in range(gradient_brush.height):
-        if y < grad_start_y:
-            factor = 0.0
-        elif y > grad_end_y:
-            factor = 1.0
-        else:
-            factor = (y - grad_start_y) / max(1, (grad_end_y - grad_start_y))
-            
-        r = int(top_color[0] + (bottom_color[0] - top_color[0]) * factor)
-        g = int(top_color[1] + (bottom_color[1] - top_color[1]) * factor)
-        b = int(top_color[2] + (bottom_color[2] - top_color[2]) * factor)
-        a = int(top_color[3] + (bottom_color[3] - top_color[3]) * factor)
-        g_draw.line([(0, y), (gradient_brush.width, y)], fill=(r, g, b, a))
+    gradient = _vertical_gradient(bg_canvas.size, start_y, start_y + line_height * len(lines), top_color, bottom_color)
+    layer = Image.new("RGBA", bg_canvas.size, (0, 0, 0, 0))
+    layer.paste(gradient, (0, 0), mask=mask)
+    bg_canvas.alpha_composite(layer)
 
-    # Mask text details smoothly over background canvas
-    text_filled_layer = Image.new("RGBA", bg_canvas.size, (0, 0, 0, 0))
-    text_filled_layer.paste(gradient_brush, (0, 0), mask=mask_layer)
-    bg_canvas.alpha_composite(text_filled_layer)
 
-def generate_thumbnail_multi(asin, product_name, specifications, image_paths_list, offer_percentage):
-    output_filename = f"tn_{asin}.jpg"
-    output_path = os.path.join(SCRIPT_DIR, output_filename)
-    
-    valid_images = [path for path in image_paths_list if os.path.exists(path)]
-    if not valid_images:
-        print("❌ Error: No valid source images found.")
+# ─── BACKGROUND REMOVAL (optional, lazy) ───
+
+_rembg_session = None
+_rembg_failed = False
+
+
+def _remove_background(data):
+    """Returns PNG bytes with transparent background, or None if rembg is unavailable."""
+    global _rembg_session, _rembg_failed
+    if _rembg_failed:
+        return None
+    try:
+        from rembg import remove, new_session
+        if _rembg_session is None:
+            _rembg_session = new_session(os.getenv("REMBG_MODEL", "u2net"))
+        return remove(data, session=_rembg_session)
+    except Exception as e:
+        _rembg_failed = True
+        print(f"⚠️ Background removal unavailable ({type(e).__name__}: {e}).")
         return None
 
-    primary_img_path = valid_images[0]
-    logging_offer = f"{offer_percentage}% OFF" if offer_percentage > 0 else "NO OFFER"
-    print(f"🚀 [Studio Engine] Compiling ASIN: {asin} ({logging_offer})")
+
+def _load_product_layer(path):
+    with open(path, "rb") as f:
+        data = f.read()
+    cut = _remove_background(data)
+    if cut:
+        layer = Image.open(io.BytesIO(cut)).convert("RGBA")
+        bbox = layer.getbbox()
+        if bbox:
+            return layer.crop(bbox)
+    print("ℹ️ Using the original photo (no cut-out) for the poster.")
+    return Image.open(io.BytesIO(data)).convert("RGBA")
+
+
+# ─── OFFER BADGE ───
+
+def draw_foreground_offer_badge(bg_canvas, offer_percentage, anchor_corner="bottom-right"):
+    """Red starburst with centred '68% / OFF' text, drawn last so it is always on top."""
+    canvas_w, canvas_h = bg_canvas.size
+    draw = ImageDraw.Draw(bg_canvas)
+    inner_r, outer_r, points = 210, 250, 24
+    margin = 160  # keeps the whole text inside the frame (spikes may still bleed off the corner)
+    cx = canvas_w - margin if "right" in anchor_corner else margin
+    cy = canvas_h - margin if "bottom" in anchor_corner else margin
+
+    star, step = [], math.pi / points
+    for i in range(points * 2):
+        rad = outer_r if i % 2 == 0 else inner_r
+        angle = i * step - math.pi / 2
+        star.append((cx + rad * math.cos(angle), cy + rad * math.sin(angle)))
+    draw.polygon(star, fill=(192, 0, 0, 255))
+
+    text = f"{int(offer_percentage)}%\nOFF"
+    font_path = download_and_get_fonts("IMPACT_BEBAS")
+    size = 180
+    while True:
+        font = safe_load_font(font_path, size)
+        l, t, r, b = draw.multiline_textbbox((0, 0), text, font=font, align="center", spacing=0)
+        if ((r - l) <= 330 and (b - t) <= 330) or size <= 70:
+            break
+        size -= 8
+    draw.multiline_text((cx, cy), text, fill=(255, 255, 255, 255), font=font, anchor="mm", align="center", spacing=0)
+
+
+# ─── MAIN ENTRY POINT (signature unchanged) ───
+
+def _build_vignette():
+    """Soft studio-light ellipse. Blurred at 1/4 size then scaled up (same look, far faster)."""
+    small = Image.new("L", (CANVAS_W // 4, CANVAS_H // 4), 0)
+    ImageDraw.Draw(small).ellipse([-250 // 4, 150 // 4, 1330 // 4, 1750 // 4], fill=130)
+    small = small.filter(ImageFilter.GaussianBlur(65))
+    return small.resize((CANVAS_W, CANVAS_H), Image.Resampling.BILINEAR)
+
+
+def generate_thumbnail_multi(asin, product_name, specifications, image_paths_list, offer_percentage):
+    output_path = os.path.join(SCRIPT_DIR, f"tn_{asin}.jpg")
+    offer_percentage = int(offer_percentage or 0)
+
+    valid_images = [p for p in image_paths_list if os.path.exists(p)]
+    if not valid_images:
+        print("❌ Thumbnail: no valid source images found.")
+        return None
+    print(f"🚀 [Studio Engine] ASIN {asin} ({offer_percentage}% OFF)" if offer_percentage > 0
+          else f"🚀 [Studio Engine] ASIN {asin} (no offer)")
 
     try:
-        # ─── PHASE 1: BACKGROUND REMOVAL & CROP ───
-        with open(primary_img_path, 'rb') as img_file:
-            input_data = img_file.read()
-        transparent_bytes = remove(input_data)
-        product_layer = Image.open(io.BytesIO(transparent_bytes)).convert("RGBA")
-
-        bounding_box = product_layer.getbbox()
-        if bounding_box:
-            product_layer = product_layer.crop(bounding_box)
-
-        # ─── PHASE 2: AUTOMATED COLOR THEME EXTRACTION ───
+        product_layer = _load_product_layer(valid_images[0])
         theme = extract_dominant_theme_from_image(product_layer, product_name)
         title_font_path = download_and_get_fonts(theme["font_style"])
 
-        # ─── PHASE 3: CANVAS BACKGROUND COMPOSITION ───
-        bg_canvas = Image.new("RGBA", (1080, 1920), theme["bg_base"])
-        canvas_w, canvas_h = bg_canvas.size
-        
-        vignette = Image.new("L", (1080, 1920), 0)
-        v_draw = ImageDraw.Draw(vignette)
-        v_draw.ellipse([-250, 150, 1330, 1750], fill=130)
-        vignette_blurred = vignette.filter(ImageFilter.GaussianBlur(260))
-        
-        studio_light = Image.new("RGBA", (1080, 1920), theme["bg_glow"])
-        bg_canvas.paste(studio_light, (0, 0), vignette_blurred)
+        bg = Image.new("RGBA", (CANVAS_W, CANVAS_H), theme["bg_base"])
+        bg.paste(Image.new("RGBA", (CANVAS_W, CANVAS_H), theme["bg_glow"]), (0, 0), _build_vignette())
 
-        print(f"🪄 [Layout Engine] Selected style variant: '{theme['bg_style']}'")
-        if theme["bg_style"] == "radial_dots":
-            overlay_graphic = draw_radial_dot_burst(bg_canvas.size, num_spokes=40, dots_per_spoke=20, base_opacity=35)
-        elif theme["bg_style"] == "alternating_waves":
-            overlay_graphic = draw_alternating_waves(bg_canvas.size, num_rings=24, base_opacity=25)
-        elif theme["bg_style"] == "squares":
-            overlay_graphic = draw_alternating_squares(bg_canvas.size, num_shapes=24, base_opacity=25)
-        elif theme["bg_style"] == "ovals":
-            overlay_graphic = draw_alternating_ovals(bg_canvas.size, num_shapes=24, base_opacity=25)
-        elif theme["bg_style"] == "rhombuses":
-            overlay_graphic = draw_alternating_rhombuses(bg_canvas.size, num_shapes=24, base_opacity=25)
+        print(f"🪄 Style variant: '{theme['bg_style']}'")
+        style = theme["bg_style"]
+        if style == "radial_dots":
+            overlay = draw_radial_dot_burst(bg.size, num_spokes=40, dots_per_spoke=20, base_opacity=35)
+        elif style == "alternating_waves":
+            overlay = draw_alternating_waves(bg.size, num_rings=24, base_opacity=25)
+        elif style == "squares":
+            overlay = draw_alternating_squares(bg.size, num_shapes=24, base_opacity=25)
+        elif style == "ovals":
+            overlay = draw_alternating_ovals(bg.size, num_shapes=24, base_opacity=25)
+        elif style == "rhombuses":
+            overlay = draw_alternating_rhombuses(bg.size, num_shapes=24, base_opacity=25)
         else:
-            overlay_graphic = draw_sunburst_rays(bg_canvas.size, num_rays=28, ray_opacity=35)
-            
-            
-        bg_canvas.alpha_composite(overlay_graphic)
+            overlay = draw_sunburst_rays(bg.size, num_rays=28, ray_opacity=35)
+        bg.alpha_composite(overlay)
 
-        # ─── PHASE 4: RENDER TYPOGRAPHY FIRST (Bottom Layer) ───
-        clean_title = product_name.strip()
-        if theme["font_style"] != "IMPACT_BEBAS" and clean_title.isupper():
-            clean_title = clean_title.title()
-            
+        # typography first (bottom layer)
+        title = product_name.strip()
+        if theme["font_style"] != "IMPACT_BEBAS" and title.isupper():
+            title = title.title()
         draw_gradient_text_block_with_3d_shadow(
-            bg_canvas=bg_canvas,
-            text=clean_title,
-            position=(80, 120),
-            font_path=title_font_path,
-            max_width=canvas_w - 160,
-            top_color=theme["gradient_top"],
-            bottom_color=theme["gradient_bottom"],
-            shadow_color=(0, 0, 0, 255),
-            offset=(11, 13)
+            bg, title, (80, 120), title_font_path, CANVAS_W - 160,
+            theme["gradient_top"], theme["gradient_bottom"], offset=(11, 13),
         )
 
-        # ─── PHASE 5: FIXED ABSOLUTE PRODUCT OVERLAY CENTERING (Top Layer) ───
-        # Keeps product safely locked to center-point (1100) and stacks it over the title text
-        center_target_x = canvas_w // 2
-        center_target_y = 1100  
-        
-        max_allowed_w = canvas_w - 60   
-        max_allowed_h = 1100 
-        
-        prod_w, prod_h = product_layer.size
-        scale_w = max_allowed_w / prod_w
-        scale_h = max_allowed_h / prod_h
-        final_scale = min(scale_w, scale_h)
-        
-        target_w = int(prod_w * final_scale * 0.92)
-        target_h = int(prod_h * final_scale * 0.92)
-            
-        product_resized = product_layer.resize((target_w, target_h), Image.Resampling.LANCZOS)
-        
-        pos_x = center_target_x - (target_w // 2)
-        pos_y = center_target_y - (target_h // 2)
+        # product on top, centred at y=1100
+        pw, ph = product_layer.size
+        scale = min((CANVAS_W - 60) / pw, 1100 / ph)
+        tw, th = max(1, int(pw * scale * 0.92)), max(1, int(ph * scale * 0.92))
+        product = product_layer.resize((tw, th), Image.Resampling.LANCZOS)
+        px, py = CANVAS_W // 2 - tw // 2, 1100 - th // 2
 
-        # Shadow processing
-        shadow_blur = 55
-        shadow_mask = product_resized.getchannel('A').resize((target_w + shadow_blur*2, target_h + shadow_blur*2), resample=Image.Resampling.BOX)
-        shadow_img = Image.new("RGBA", shadow_mask.size, (2, 2, 4, 235))
-        shadow_blurred = Image.composite(shadow_img, Image.new("RGBA", shadow_mask.size), shadow_mask)
-        shadow_blurred = shadow_blurred.filter(ImageFilter.GaussianBlur(shadow_blur // 2))
-        
-        # Paste over the typography layer
-        bg_canvas.alpha_composite(shadow_blurred, (pos_x - shadow_blur, pos_y - shadow_blur))
-        bg_canvas.alpha_composite(product_resized, (pos_x, pos_y))
+        blur = 55
+        mask = product.getchannel("A").resize((tw + blur * 2, th + blur * 2), resample=Image.Resampling.BOX)
+        shadow = Image.composite(Image.new("RGBA", mask.size, (2, 2, 4, 235)), Image.new("RGBA", mask.size), mask)
+        shadow = shadow.filter(ImageFilter.GaussianBlur(blur // 2))
+        bg.alpha_composite(shadow, (px - blur, py - blur))
+        bg.alpha_composite(product, (px, py))
 
-        # ─── INTEGRATION: DRAW THE DYNAMIC PRIORITY BADGE last ───
-        # This modular function is added at the end of the script definition below.
-        # It guarantees the offer is the highest layer in the composition.
-        
         if offer_percentage > 0:
-            print(f"    [Offer] Invoking Foreground Badge Priority: {offer_percentage}% OFF")
-            
-            # Anchor to lower right for YouTube Shorts/Reels safely.
-            # We must call the modular function defined below.
-            draw_foreground_offer_badge(
-                bg_canvas=bg_canvas,
-                offer_percentage=offer_percentage,
-                anchor_corner="bottom-right"
-            )
-        # ─────────────────────────────────────────────────────────
+            draw_foreground_offer_badge(bg, offer_percentage, anchor_corner="bottom-right")
 
-        # Output conversion
-        final_thumbnail = bg_canvas.convert("RGB")
-        final_thumbnail.save(output_path, "JPEG", quality=95)
-        print(f"🎉 SUCCESS: Balanced 3D overlay poster with fixed text gradient saved to: {output_path}\n")
+        bg.convert("RGB").save(output_path, "JPEG", quality=95)
+        print(f"🎉 Thumbnail saved: {output_path}")
         return output_path
-
     except Exception as e:
-        print(f"❌ Dynamic Engine Failed: {e}")
+        print(f"❌ Thumbnail engine failed: {type(e).__name__}: {e}")
         return None
 
-def draw_foreground_offer_badge(bg_canvas, offer_percentage, anchor_corner="bottom-right"):
-    """
-    Modular function to draw a dynamic starburst badge 
-    with dynamic integer text in a contrasting fixed palette.
-    """
-    canvas_w, canvas_h = bg_canvas.size
-    draw = ImageDraw.Draw(bg_canvas)
-    
-    # 1. Choose contrating colors that bypass theme logic
-    # Fixed Red/Gold Starburst
-    burst_base_color = (192, 0, 0, 255) # Clear Red
-    burst_border_color = (255, 153, 0, 255) # Saturated Gold
-    text_color = (255, 255, 255, 255) # Pure White text
-    shadow_color = (0, 0, 10, 245) # Deep navy shadow
-
-    # 2. Position constraints and asset generation
-    # Create the text asset: "65% OFF" or "SAVE 50%"
-    # Minimal text text: "65%"
-    offer_text = f"{offer_percentage}% \n OFF"
-    
-    # Use a consistently bold, Impact-style font (Bebas or Montserrat Black is good)
-    # Be minimal: Reuse the existing Bebas font which is bold.
-    font_path = download_and_get_fonts("IMPACT_BEBAS")
-    
-    # Dynamic text scaling for badge
-    current_size = 180
-    while current_size >= 120:
-        font = safe_load_font(font_path, current_size)
-        bbox = font.getbbox(offer_text)
-        text_w = bbox[2] - bbox[0]
-        if text_w <= 360: # Max text width in starburst region
-            break
-        current_size -= 8
-    
-    # Text height logic remains unchanged
-    
-    # 3. Geometric Starburst logic (PIL specific):
-    # PIL draw.polygon needs center coordinates, a base radius, and an outer/spike radius.
-    burst_points = 24
-    
-    # A badge size optimized for Shorts: 450px region.
-    burst_inner_radius = 210
-    burst_outer_radius = 250
-    # Add Gold Border (minimal change)
-    burst_inner_radius_outer_ring = burst_outer_radius + 15
-    burst_outer_radius_outer_ring = burst_inner_radius_outer_ring + 2
-    
-    # Anchor coordinates in the corner (bottom-right)
-    center_x = canvas_w - 160
-    center_y = canvas_h - 160
-    
-    # Generate starburst polygon points
-    def generate_starburst_points(cx, cy, inner, outer, points):
-        star_coords = []
-        angle_step = (2 * math.pi) / (points * 2)
-        for i in range(points * 2):
-            angle = i * angle_step
-            # Alternating between inner and outer radius creates the points
-            rad = outer if i % 2 == 0 else inner
-            x = cx + rad * math.cos(angle - math.pi/2)
-            y = cy + rad * math.sin(angle - math.pi/2)
-            star_coords.append((x, y))
-        return star_coords
-
-    # Draw Gold Border first (minimal change)
-    # g_burst = generate_starburst_points(center_x, center_y, burst_inner_radius_outer_ring, burst_outer_radius_outer_ring, burst_points)
-    # draw.polygon(g_burst, fill=burst_border_color)
-
-    # Minimal logic draw simple Contrasting Burst
-    burst = generate_starburst_points(center_x, center_y, burst_inner_radius, burst_outer_radius, burst_points)
-    draw.polygon(burst, fill=burst_base_color)
-    
-    # 4. Add dynamic text inside the contrasting geometric burst
-    bbox = font.getbbox(offer_text)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
-    
-    # Center text in starburst region
-    text_x = center_x - (text_w // 4)
-    # Vertical centering tweak for Impact font desceders
-    text_y = center_y - (text_h // 0.7) - (current_size // 15)
-
-    # Heavy Shadow for priority punch (contrasting fixed palette)
-    # off_x, off_y = (15, 18)
-    # draw.text((text_x + off_x, text_y + off_y), offer_text, fill=shadow_color, font=font)
-    
-    # Draw priority white text
-    draw.text((text_x, text_y), offer_text, fill=text_color, font=font)
 
 if __name__ == "__main__":
-    # IMPORTANT: Ensure 'bottle_test.jpg' is a clean original product image file asset, 
-    # not a previously processed thumbnail containing background frames!
-    generate_thumbnail_multi(
-        asin="B0FVX789CR", 
-        product_name="Zoom In, Not Out", 
-        specifications=[], 
-        image_paths_list=[os.path.join(SCRIPT_DIR, "test.jpg"),],
-        offer_percentage=68
-    )
+    test = os.path.join(SCRIPT_DIR, "test.jpg")  # must be a clean ORIGINAL product photo
+    if os.path.exists(test):
+        generate_thumbnail_multi("B0FVX789CR", "Zoom In, Not Out", [], [test], 68)
+    else:
+        print("Put a product photo named test.jpg next to this file to try the engine.")

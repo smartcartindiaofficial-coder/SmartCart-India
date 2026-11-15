@@ -1,563 +1,425 @@
+"""
+editor.py - renders the vertical (1080x1920) promo video.
+
+Changes vs the old version
+  SPEED
+  * Blurred backgrounds are computed ONCE per image (the old code re-blurred a
+    1080x1920 frame with a 151px kernel for every single frame, twice during
+    cross-fades). The blur now runs at quarter size and is scaled up.
+  * Progress bar only touches its own 12px strip (no full-frame copy per frame).
+  * Logo/outro canvas is built once and reused; vectorised alpha blending
+    (no per-channel Python loops).
+  * The random 5-15 s sleep (a leftover from TTS rate-limiting) is gone.
+  * Output is written at 24 fps (what the frames were rendered at) instead of
+    re-timing to 30.
+  FIXES
+  * Subtitle wrapping now measures with the SAME font/case that is drawn (the old
+    code measured lower-case SIMPLEX but drew upper-case COMPLEX, so long lines
+    ran off-screen). Non-ASCII characters (₹, emoji) are dropped because OpenCV's
+    built-in fonts cannot draw them (they showed up as "???").
+  * No zoom "jump" on the last image, and no missing outro time when the logo
+    file is absent.
+  * Assets (logos, Background_Music) are found next to this file, not in the
+    launch directory.
+  * Voiceover (edge-tts) is optional and OFF by default, as in your current setup:
+    set ENABLE_VOICEOVER=1 to turn it on. MoviePy v1 and v2 are both supported.
+  * Music volume is configurable with MUSIC_VOLUME (default 1.0).
+
+Use only royalty-free music in Background_Music/ - otherwise YouTube/Instagram can
+mute or claim your videos.
+"""
 import os
+import re
 import random
+from functools import lru_cache
+
 import cv2
 import numpy as np
-import asyncio
-import edge_tts
-import nest_asyncio
-import time
 
-try:
-    # Try importing using the newer MoviePy v2.x structure
+try:  # MoviePy v2.x
     from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip
-except ImportError:
-    # Fallback to older MoviePy v1.x structure if needed
+except ImportError:  # MoviePy v1.x
     from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+W, H = 1080, 1920
+FPS = 24
+TOTAL_SECONDS = 15
+OUTRO_SECONDS = 3
+THUMB_SECONDS = 1.2
+TRANSITION_FRAMES = 12
+SUBTITLE_Y = 1600
+SUBTITLE_MAX_W = 940           # keeps text inside the 1080px frame with margins
+SUB_FONT = cv2.FONT_HERSHEY_COMPLEX
+SUB_SCALE = 1.3
+SUB_THICK = 3
+
+ENABLE_VOICEOVER = os.getenv("ENABLE_VOICEOVER", "0") == "1"
+MUSIC_VOLUME = float(os.getenv("MUSIC_VOLUME", "1.0"))
+
+
+# ----------------------------------------------------------------------------
+# MoviePy v1/v2 compatibility helpers
+# ----------------------------------------------------------------------------
+def _subclip(clip, start, end):
+    return clip.subclipped(start, end) if hasattr(clip, "subclipped") else clip.subclip(start, end)
+
+
+def _scale_volume(clip, factor):
+    if abs(factor - 1.0) < 1e-6:
+        return clip
+    return clip.with_volume_scaled(factor) if hasattr(clip, "with_volume_scaled") else clip.volumex(factor)
+
+
+def _with_audio(video, audio):
+    return video.with_audio(audio) if hasattr(video, "with_audio") else video.set_audio(audio)
+
+
+# ----------------------------------------------------------------------------
+# OPTIONAL VOICEOVER (edge-tts, free). Off by default.
+# ----------------------------------------------------------------------------
 def generate_voiceover(text, output_audio_path):
-    voice_pool = [
-        "en-IN-PrabhatNeural",  # Clear Indian English (Male)
-        "en-IN-NeerjaNeural",   # Smooth Indian English (Female)
-        "en-US-GuyNeural",      # Natural US English (Male)
-        "en-US-AriaNeural",     # Natural US English (Female)
-        "en-GB-RyanNeural",     # Professional UK English (Male)
-        "en-GB-SoniaNeural",     # Professional UK English (Female)
-    ]
+    try:
+        import asyncio
+        import edge_tts
+    except ImportError:
+        print("⚠️ edge-tts not installed; skipping voiceover (pip install edge-tts).")
+        return False
 
-    selected_voice = random.choice(voice_pool)
-    print(f"🎙️ [Voiceover Engine] Selected voice asset: {selected_voice}")
+    voice = random.choice([
+        "en-IN-PrabhatNeural", "en-IN-NeerjaNeural", "en-US-GuyNeural",
+        "en-US-AriaNeural", "en-GB-RyanNeural", "en-GB-SoniaNeural",
+    ])
+    print(f"🎙️ Voiceover voice: {voice}")
+    clean = text.replace('"', "").replace("'", "").replace("@", " ").replace("||", " ")
 
-    # 🚀 Step 1: Split text strictly at your custom '@' delimiter
-    if "@" in text:
-        hook, body = text.split("@", 1)
-    elif "||" in text:
-        hook, body = text.split("||", 1)
-    elif "." in text:
-        hook, body = text.split(".", 1)
-    else:
-        hook, body = text, ""
-
-    hook = hook.strip().replace('"', '').replace('\'', '')
-    body = body.strip().replace('"', '').replace('\'', '')
-
-    # Helper function to run async functions safely regardless of loop state
-    def run_async_safe(coro):
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        if loop.is_running():
-            # If an event loop is already running in this thread, use a task
-            return asyncio.run_coroutine_threadsafe(coro, loop).result()
-        else:
-            return loop.run_until_complete(coro)
-
-    # Fallback if there is no secondary text body segment
-    if not body:
-        async def render_single():
-            communicate = edge_tts.Communicate(text, selected_voice, rate="-5%")
-            await communicate.save(output_audio_path)
-        try:
-            run_async_safe(render_single())
-            return True
-        except Exception as e:
-            print(f"❌ Single audio generation failed: {e}")
-            return False
-
-    # Define paths for the temporary split audio files
-    temp_hook_path = output_audio_path.replace(".mp3", "_hook_temp.mp3")
-    temp_body_path = output_audio_path.replace(".mp3", "_body_temp.mp3")
-
-    async def render_segments():
-        # ⚡ Hook segment: Spoken with higher urgency (+20% speech rate)
-        # REMOVED: broken proxy="http://your_residential_proxy_ip:port" parameter
-        communicate_hook = edge_tts.Communicate(hook, selected_voice, rate="+20%", volume="+35%")
-        await communicate_hook.save(temp_hook_path)
-
-        await asyncio.sleep(1.5)
-
-        # 🍃 Body segment: Spoken at a normal, smooth narrator pace (-6% speech rate)
-        communicate_body = edge_tts.Communicate(body, selected_voice, rate="-6%")
-        await communicate_body.save(temp_body_path)
+    async def render():
+        await edge_tts.Communicate(clean, voice, rate="-5%").save(output_audio_path)
 
     try:
-        # Render the separate segments safely
-        run_async_safe(render_segments())
-
-        if os.path.exists(temp_hook_path) and os.path.exists(temp_body_path):
-            hook_clip = AudioFileClip(temp_hook_path)
-            body_clip = AudioFileClip(temp_body_path)
-
-            # 🔊 Amplify the hook clip by 45% using moviepy's native audio effects
-            hook_clip = hook_clip.volumex(1.45)
-
-            # Stitch them back together sequentially
-            from moviepy.editor import concatenate_audioclips
-            final_audio = concatenate_audioclips([hook_clip, body_clip])
-            final_audio.write_audiofile(output_audio_path, fps=44100, logger=None)
-
-            # Close file handles to allow system cleanup
-            hook_clip.close()
-            body_clip.close()
-            final_audio.close()
-
-            # Remove temporary clip segments
-            if os.path.exists(temp_hook_path): os.remove(temp_hook_path)
-            if os.path.exists(temp_body_path): os.remove(temp_body_path)
-            
-            print(f"🎙️ Success: Combined audio using your custom '@' delimiter splits!")
-            return True
-        else:
-            raise ValueError("Audio segment generation missing files.")
-
-    except Exception as e:
-        print(f"⚠️ Split rendering failed ({e}). Reverting to unified audio text layout...")
-        async def fallback_main():
-            clean_text = text.replace("@", "").replace("||", "")
-            communicate = edge_tts.Communicate(clean_text, selected_voice, rate="-5%")
-            await communicate.save(output_audio_path)
         try:
-            run_async_safe(fallback_main())
-            return True
-        except Exception as final_err:
-            print(f"❌ Critical Audio Breakdown: {final_err}")
-            return False
+            asyncio.run(render())
+        except RuntimeError:  # an event loop is already running (e.g. notebooks)
+            import nest_asyncio
+            nest_asyncio.apply()
+            asyncio.get_event_loop().run_until_complete(render())
+        return os.path.exists(output_audio_path)
+    except Exception as e:
+        print(f"❌ Voiceover generation failed: {e}")
+        return False
 
-def get_wrapped_lines(text, max_w, font, font_scale, thickness):
-    """
-    Utility function to break a long script down into perfectly sized visual lines.
-    """
-    words = text.split(' ')
-    lines = []
-    current_line = ""
-    
-    for word in words:
-        test_line = current_line + " " + word if current_line else word
-        (text_w, _), _ = cv2.getTextSize(test_line, font, font_scale, thickness)
-        
-        if text_w < max_w:
-            current_line = test_line
+
+# ----------------------------------------------------------------------------
+# SUBTITLES
+# ----------------------------------------------------------------------------
+@lru_cache(maxsize=4096)
+def _text_size(text):
+    (w, h), _ = cv2.getTextSize(text, SUB_FONT, SUB_SCALE, SUB_THICK)
+    return w, h
+
+
+def _clean_for_hershey(text):
+    """OpenCV's built-in fonts are ASCII only - drop everything else."""
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[()\[\]\"<>]", "", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def get_wrapped_lines(text, max_w=SUBTITLE_MAX_W):
+    """Break the script into lines that fit - measured exactly as they are drawn (upper-case)."""
+    lines, current = [], ""
+    for word in text.upper().split(" "):
+        if not word:
+            continue
+        candidate = f"{current} {word}" if current else word
+        if _text_size(candidate)[0] < max_w:
+            current = candidate
         else:
-            if current_line:
-                lines.append(current_line.strip())
-            current_line = word
-    if current_line:
-        lines.append(current_line.strip())
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
     return lines
 
-def draw_word_by_word_subtitle(frame, line_text, center_x, bottom_y, frame_in_line, total_frames_for_line):
-    """
-    Renders subtitles word-by-word into a sentence block.
-    As time progresses, more words from line_text seamlessly reveal themselves.
-    The first word is highlighted in cyan/yellow, while subsequent visible words are clean white.
-    """
+
+def draw_word_by_word_subtitle(frame, line_text, frame_in_line, total_frames_for_line):
+    """Reveal words one by one: first word neon-highlighted, the rest white, black outline."""
     if not line_text:
         return
-
-    font = cv2.FONT_HERSHEY_COMPLEX
-    font_scale = 1.3
-    thickness = 3
-    shadow_thickness = 9
-    color_highlight = (0, 230, 255)  # Eye-catching neon yellow/cyan
-    color_white = (255, 255, 255)
-    color_black = (0, 0, 0)
-
     words = line_text.split()
-    num_words = len(words)
-    
-    # Calculate ongoing step counts to reveal text progressively
-    progress = frame_in_line / total_frames_for_line
-    words_to_show = int(progress * num_words) + 1
-    words_to_show = min(words_to_show, num_words)
+    n = len(words)
+    shown = min(int(frame_in_line / max(1, total_frames_for_line) * n) + 1, n)
 
-    # Segment the current visible words subset
-    visible_words = words[:words_to_show]
-    first_word = visible_words[0].upper()
-    remaining_visible = " ".join(visible_words[1:]).upper() if len(visible_words) > 1 else ""
+    first_full = words[0]
+    rest_full = " ".join(words[1:])
+    w1, h1 = _text_size(first_full)
+    w2, h2 = _text_size(rest_full) if rest_full else (0, 0)
+    space_w = _text_size(" ")[0] if rest_full else 0
 
-    # Measure full text boundary constraints to anchor center position
-    # This keeps spacing solid and stops words from jumping horizontally as they append
-    full_first = words[0].upper()
-    full_remaining = " ".join(words[1:]).upper() if len(words) > 1 else ""
-    
-    (w1_full, h1), _ = cv2.getTextSize(full_first, font, font_scale, thickness)
-    if full_remaining:
-        (w2_full, h2), _ = cv2.getTextSize(full_remaining, font, font_scale, thickness)
-        (space_w, _), _ = cv2.getTextSize(" ", font, font_scale, thickness)
+    tx = W // 2 - (w1 + space_w + w2) // 2
+    ty = SUBTITLE_Y + max(h1, h2) // 2
+
+    def put(text, x, color):
+        cv2.putText(frame, text, (x, ty), SUB_FONT, SUB_SCALE, (0, 0, 0), 9, cv2.LINE_AA)
+        cv2.putText(frame, text, (x, ty), SUB_FONT, SUB_SCALE, color, SUB_THICK, cv2.LINE_AA)
+
+    put(first_full, tx, (0, 230, 255))
+    if shown > 1:
+        put(" ".join(words[1:shown]), tx + w1 + space_w, (255, 255, 255))
+
+
+# ----------------------------------------------------------------------------
+# DRAWING HELPERS
+# ----------------------------------------------------------------------------
+def draw_progress_bar(frame, current_frame, total_frames):
+    """Thin progress line at the top; only touches its own strip."""
+    bar_h = 12
+    roi = frame[0:bar_h, :]
+    track = np.full_like(roi, (35, 30, 32))
+    cv2.addWeighted(track, 0.5, roi, 0.5, 0, roi)
+    fill = int(W * min(1.0, current_frame / max(1, total_frames)))
+    if fill > 0:
+        roi[:, :fill] = (0, 230, 255)
+
+
+def make_background(img, brightness):
+    """Blurred, darkened full-frame backdrop. Blur at 1/4 size, then scale up (much faster)."""
+    small = cv2.resize(img, (W // 4, H // 4), interpolation=cv2.INTER_AREA)
+    small = cv2.GaussianBlur(small, (0, 0), 14)
+    big = cv2.resize(small, (W, H), interpolation=cv2.INTER_LINEAR)
+    return (big.astype(np.float32) * brightness).astype(np.uint8)
+
+
+class Scene:
+    """One product image with its pre-computed backdrop."""
+
+    def __init__(self, img):
+        self.img = img
+        self.bg = make_background(img, 0.65)
+
+    def render(self, frame_i, total_frames):
+        h, w = self.img.shape[:2]
+        zoom = 1.0 + 0.05 * (frame_i / max(1, total_frames))  # gentle Ken Burns zoom
+        ratio = min(W / w, H / h)
+        tw, th = max(1, int(w * ratio * zoom)), max(1, int(h * ratio * zoom))
+        fg = cv2.resize(self.img, (tw, th), interpolation=cv2.INTER_LINEAR)
+        x1, y1 = max(0, (tw - W) // 2), max(0, (th - H) // 2)
+        fg = fg[y1:y1 + H, x1:x1 + W]
+        fh, fw = fg.shape[:2]
+        canvas = self.bg.copy()
+        oy, ox = (H - fh) // 2, (W - fw) // 2
+        canvas[oy:oy + fh, ox:ox + fw] = fg
+        return canvas
+
+
+def overlay_image(canvas, overlay, x, y):
+    """Alpha-blend `overlay` onto `canvas` at (x, y), clipped to the frame."""
+    if overlay is None:
+        return
+    if overlay.ndim == 2:
+        overlay = cv2.cvtColor(overlay, cv2.COLOR_GRAY2BGR)
+    oh, ow = overlay.shape[:2]
+    x0, y0 = max(0, x), max(0, y)
+    x1, y1 = min(W, x + ow), min(H, y + oh)
+    if x0 >= x1 or y0 >= y1:
+        return
+    part = overlay[y0 - y:y1 - y, x0 - x:x1 - x]
+    roi = canvas[y0:y1, x0:x1]
+    if part.shape[2] == 4:
+        alpha = part[:, :, 3:4].astype(np.float32) / 255.0
+        roi[:] = (alpha * part[:, :, :3] + (1.0 - alpha) * roi).astype(np.uint8)
     else:
-        w2_full, h2, space_w = 0, 0, 0
+        roi[:] = part
 
-    total_w_full = w1_full + space_w + w2_full
-    tx = center_x - (total_w_full // 2)
-    ty = bottom_y + (max(h1, h2) // 2)
 
-    # ---- Draw Highlighted First Word ----
-    cv2.putText(frame, first_word, (tx, ty), font, font_scale, color_black, shadow_thickness, cv2.LINE_AA)
-    cv2.putText(frame, first_word, (tx, ty), font, font_scale, color_highlight, thickness, cv2.LINE_AA)
+def _load_logo(name, width):
+    path = os.path.join(SCRIPT_DIR, name)
+    if not os.path.exists(path):
+        return None
+    logo = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    if logo is None:
+        return None
+    h, w = logo.shape[:2]
+    return cv2.resize(logo, (width, max(1, int(h * width / w))))
 
-    # ---- Draw Remaining Appending Words ----
-    if remaining_visible:
-        (w1_now, _), _ = cv2.getTextSize(full_first, font, font_scale, thickness)
-        (s_w, _), _ = cv2.getTextSize(" ", font, font_scale, thickness)
-        
-        # Silhouette outline stroke
-        cv2.putText(frame, remaining_visible, (tx + w1_now + s_w, ty), font, font_scale, color_black, shadow_thickness, cv2.LINE_AA)
-        # Main body content core
-        cv2.putText(frame, remaining_visible, (tx + w1_now + s_w, ty), font, font_scale, color_white, thickness, cv2.LINE_AA)
 
-def draw_video_duration_line(frame, current_frame, total_frames):
-    """
-    Draws a sleek, modern, auto-advancing progress line 
-    at the very top edge of the video frame container.
-    """
-    h, w, _ = frame.shape
-    bar_height = 12
-    
-    progress_ratio = min(1.0, current_frame / max(1, total_frames))
-    fill_width = int(w * progress_ratio)
-    
-    # 1. Base track overlay lane (Translucent matte backing)
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (w, bar_height), (35, 30, 32), -1)
-    cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
-    
-    # 2. Dynamic foreground load neon banner
-    if fill_width > 0:
-        cv2.rectangle(frame, (0, 0), (fill_width, bar_height), (0, 230, 255), -1, cv2.LINE_AA)
+def build_outro_canvas(last_img, logo, link_logo):
+    canvas = make_background(last_img, 0.35)
+    lh, lw = logo.shape[:2]
+    lx, ly = (W - lw) // 2, (H - lh) // 2
+    overlay_image(canvas, logo, lx, ly)
 
-def get_rendered_scene_canvas(img, frame_in_image, total_image_frames):
-    """
-    Generates a scaled, blurred background canvas layered with a smooth 
-    cinematic Ken Burns zooming foreground image layout.
-    """
-    orig_h, orig_w, _ = img.shape
-    bg_canvas = cv2.resize(img, (1080, 1920))
-    blurred_bg = cv2.GaussianBlur(bg_canvas, (151, 151), 0)
-    black_tint = np.zeros_like(blurred_bg)
-    canvas = cv2.addWeighted(blurred_bg, 0.65, black_tint, 0.35, 0)
+    text = "Follow & Subscribe for More Deals!"
+    (tw, _), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1.1, 3)
+    cv2.putText(canvas, text, ((W - tw) // 2, ly + lh + 100), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 255), 3, cv2.LINE_AA)
 
-    progress = frame_in_image / max(1, total_image_frames)
-    zoom_factor = 1.0 + (progress * 0.05) 
-
-    scale_ratio = min(1080 / orig_w, 1920 / orig_h)
-    target_w = int(orig_w * scale_ratio * zoom_factor)
-    target_h = int(orig_h * scale_ratio * zoom_factor)
-    fg_resized = cv2.resize(img, (target_w, target_h))
-
-    crop_x1 = max(0, (target_w - 1080) // 2)
-    crop_y1 = max(0, (target_h - 1920) // 2)
-    fg_cropped = fg_resized[crop_y1:crop_y1+1920, crop_x1:crop_x1+1080]
-
-    fg_h, fg_w, _ = fg_cropped.shape
-    start_y = (1080 - fg_w) // 2
-    start_x = (1920 - fg_h) // 2
-    
-    canvas[start_x:start_x+fg_h, start_y:start_y+fg_w] = fg_cropped
+    if link_logo is not None:
+        overlay_image(canvas, link_logo, (W - link_logo.shape[1]) // 2, 150)
     return canvas
 
+
+# ----------------------------------------------------------------------------
+# MAIN ENTRY POINT (signature unchanged)
+# ----------------------------------------------------------------------------
 def create_pro_video(image_paths, product_name, output_path, voice_text=None):
-    print(f"🎬 [Editor] Launching Premium Word-by-Word Rendering Pipeline for: {product_name[:20]}...")
-    
-    valid_images = []
-    thumbnail_img = None
+    print(f"🎬 [Editor] Rendering video for: {product_name[:25]}...")
 
+    thumbnail_img, product_imgs = None, []
     for idx, path in enumerate(image_paths):
-        if os.path.exists(path):
-            img = cv2.imread(path)
-            if img is not None:
-                if idx == 0 and os.path.basename(path).startswith("tn_"):
-                    thumbnail_img = img
-                else:
-                    valid_images.append(img)
-
-    if not valid_images and thumbnail_img is not None:
-        valid_images.append(thumbnail_img)
-    elif not valid_images:
-        print("❌ [Editor Error] No valid product images found to compile.")
+        if not os.path.exists(path):
+            continue
+        img = cv2.imread(path)
+        if img is None:
+            continue
+        if idx == 0 and os.path.basename(path).startswith("tn_"):
+            thumbnail_img = img
+        else:
+            product_imgs.append(img)
+    if not product_imgs and thumbnail_img is not None:
+        product_imgs.append(thumbnail_img)
+        thumbnail_img = None
+    if not product_imgs:
+        print("❌ [Editor] No valid images to compile.")
         return False
 
-    temp_tts_path = output_path.replace(".mp4", "_voiceover.mp3")
-    has_voice = False
-    total_duration = 15  
+    # optional voiceover decides the length
+    tts_path, has_voice, total_seconds = output_path.replace(".mp4", "_voiceover.mp3"), False, TOTAL_SECONDS
+    if ENABLE_VOICEOVER and voice_text and generate_voiceover(voice_text, tts_path):
+        try:
+            probe = AudioFileClip(tts_path)
+            total_seconds = min(int(probe.duration) + OUTRO_SECONDS + 1, 58)
+            probe.close()
+            has_voice = True
+        except Exception as e:
+            print(f"⚠️ Could not read voiceover length: {e}")
 
-    time.sleep(random.randint(5, 15))
+    logo = _load_logo("SCIO_Logo.png", 500)
+    link_logo = _load_logo("LinkInBio_Logo.png", 700)
+    has_outro = logo is not None
 
-    # if voice_text and generate_voiceover(voice_text, temp_tts_path):
-    #     try:
-    #         temp_audio = AudioFileClip(temp_tts_path)
-    #         total_duration = min(int(temp_audio.duration) + 1, 58) 
-    #         temp_audio.close()
-    #         has_voice = True
-    #     except Exception as audio_prep_err:
-    #         print(f"⚠️ Could not parse audio track dimensions: {audio_prep_err}")
-
-    fps = 24
-    outro_duration = 3  
-    thumb_duration = 1.2 
-    logo_filename = "SCIO_Logo.png"
-    logo_path = os.path.join(os.getcwd(), logo_filename)
-    logo_img = cv2.imread(logo_path, cv2.IMREAD_UNCHANGED) if os.path.exists(logo_path) else None
-    
-    total_frames = total_duration * fps
-    outro_frames = outro_duration * fps
-    thumb_frames = int(thumb_duration * fps) if thumbnail_img is not None else 0
+    total_frames = total_seconds * FPS
+    outro_frames = OUTRO_SECONDS * FPS if has_outro else 0
+    thumb_frames = int(THUMB_SECONDS * FPS) if thumbnail_img is not None else 0
     product_frames = total_frames - outro_frames - thumb_frames
-    
-    if product_frames <= 0:  
-        product_frames = total_frames
-        outro_frames = 0
-        thumb_frames = 0
+    if product_frames <= 0:
+        product_frames, outro_frames, thumb_frames = total_frames, 0, 0
+        has_outro = False
 
-    frames_per_image = product_frames // len(valid_images) if len(valid_images) > 0 else product_frames
+    # frames per image; the last image absorbs the remainder (no zoom reset)
+    n = len(product_imgs)
+    base = product_frames // n
+    img_frames = [base] * n
+    img_frames[-1] += product_frames - base * n
 
-    # Generate visual sentence line groups from narrative script
-    subtitle_lines = []
-    if voice_text:
-        clean_script = ''.join(c for c in voice_text if c not in '()[]"-').strip()
-        subtitle_lines = get_wrapped_lines(clean_script, 900, cv2.FONT_HERSHEY_SIMPLEX, 1.3, 3)
-        
+    script = _clean_for_hershey(voice_text or "")
+    subtitle_lines = get_wrapped_lines(script) if script else []
     if not subtitle_lines:
-        subtitle_lines = ["Check Out This Amazing Deal!", "Link Is Available Below."]
+        subtitle_lines = ["CHECK OUT THIS AMAZING DEAL!", "LINK IS AVAILABLE BELOW."]
+    frames_per_line = max(1, product_frames // len(subtitle_lines))
 
-    total_lines = len(subtitle_lines)
-    frames_per_subtitle_line = max(1, product_frames // total_lines)
+    scenes = [Scene(img) for img in product_imgs]
+    thumb_scene = Scene(thumbnail_img) if thumbnail_img is not None else None
+    outro_canvas = build_outro_canvas(product_imgs[-1], logo, link_logo) if has_outro else None
 
-    temp_video_path = output_path.replace(".mp4", "_temp_render.avi")
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter(temp_video_path, fourcc, fps, (1080, 1920))
+    temp_video = output_path.replace(".mp4", "_temp_render.avi")
+    writer = cv2.VideoWriter(temp_video, cv2.VideoWriter_fourcc(*"XVID"), FPS, (W, H))
+    if not writer.isOpened():
+        print("❌ [Editor] OpenCV could not open the video writer (XVID codec missing?).")
+        return False
 
-    global_frame_counter = 0
-
-    # ==========================================
-    # PHASE A: WRITE THUMBNAIL HOOK FRAMES
-    # ==========================================
-    if thumb_frames > 0 and thumbnail_img is not None:
-        print("🖼️ Rendering ultra-clean thumbnail hook sequence...")
-        base_canvas = get_rendered_scene_canvas(thumbnail_img, 0, thumb_frames)
-        # Display the first word of the first sentence as a hook text
-        draw_word_by_word_subtitle(base_canvas, subtitle_lines[0], 1080 // 2, 1600, 0, thumb_frames)
-        
-        for _ in range(thumb_frames):
-            frame_to_write = base_canvas.copy()
-            draw_video_duration_line(frame_to_write, global_frame_counter, total_frames)
-            out.write(frame_to_write)
-            global_frame_counter += 1
-
-    # ==========================================
-    # PHASE B: MAIN SLIDESHOW LOOP (TRANSITIONS & APPENING SUBTITLES)
-    # ==========================================
-    print("🎞️ Rendering zoom sequences with seamless cross-fades and progress metrics...")
-    transition_frames = 12  
-
-    for f_idx in range(product_frames):
-        img_idx = min(f_idx // frames_per_image, len(valid_images) - 1)
-        frame_in_curr_img = f_idx % frames_per_image
-        
-        current_canvas = get_rendered_scene_canvas(valid_images[img_idx], frame_in_curr_img, frames_per_image)
-        
-        # Cross-Fade Image Transition Logic
-        if frame_in_curr_img >= (frames_per_image - transition_frames):
-            trans_progress = (frame_in_curr_img - (frames_per_image - transition_frames)) / transition_frames
-            
-            if img_idx < (len(valid_images) - 1):
-                next_canvas = get_rendered_scene_canvas(valid_images[img_idx + 1], frame_in_curr_img - (frames_per_image - transition_frames), frames_per_image)
-                current_canvas = cv2.addWeighted(current_canvas, 1.0 - trans_progress, next_canvas, trans_progress, 0)
-            elif img_idx == (len(valid_images) - 1) and outro_frames > 0 and logo_img is not None:
-                last_img = valid_images[-1].copy()
-                bg_logo_canvas_preview = cv2.resize(last_img, (1080, 1920))
-                bg_logo_canvas_preview = cv2.GaussianBlur(bg_logo_canvas_preview, (151, 151), 0)
-                dark_matte = np.zeros_like(bg_logo_canvas_preview)
-                bg_logo_canvas_preview = cv2.addWeighted(bg_logo_canvas_preview, 0.35, dark_matte, 0.65, 0)
-                
-                logo_h, logo_w = logo_img.shape[:2]
-                logo_scale = 500 / logo_w
-                new_logo_w = 500
-                new_logo_h = int(logo_h * logo_scale)
-                resized_logo = cv2.resize(logo_img, (new_logo_w, new_logo_h))
-                logo_x_start = (1080 - new_logo_w) // 2
-                logo_y_start = (1920 - new_logo_h) // 2
-                
-                if resized_logo.shape[2] == 4:  
-                    alpha_ch = resized_logo[:, :, 3] / 255.0
-                    for c in range(3):
-                        bg_logo_canvas_preview[logo_y_start:logo_y_start+new_logo_h, logo_x_start:logo_x_start+new_logo_w, c] = (
-                            alpha_ch * resized_logo[:, :, c] +
-                            (1.0 - alpha_ch) * bg_logo_canvas_preview[logo_y_start:logo_y_start+new_logo_h, logo_x_start:logo_x_start+new_logo_w, c]
-                        )
-                else:  
-                    bg_logo_canvas_preview[logo_y_start:logo_y_start+new_logo_h, logo_x_start:logo_x_start+new_logo_w] = resized_logo
-                
-                current_canvas = cv2.addWeighted(current_canvas, 1.0 - trans_progress, bg_logo_canvas_preview, trans_progress, 0)
-
-        # Calculate exact timeline position within the current block to trigger words step-by-step
-        line_index = min(f_idx // frames_per_subtitle_line, total_lines - 1)
-        frame_in_current_line = f_idx % frames_per_subtitle_line
-        
-        draw_word_by_word_subtitle(
-            current_canvas, 
-            subtitle_lines[line_index], 
-            1080 // 2, 
-            1600, 
-            frame_in_current_line, 
-            frames_per_subtitle_line
-        )
-        
-        # Inject the advancing video progress bar
-        draw_video_duration_line(current_canvas, global_frame_counter, total_frames)
-
-        out.write(current_canvas)
-        global_frame_counter += 1
-
-    # ==========================================
-    # PHASE C: BRAND OUTRO SEQUENCE
-    # ==========================================
-    if outro_frames > 0 and logo_img is not None:
-        last_img = valid_images[-1].copy()
-        bg_logo_canvas = cv2.resize(last_img, (1080, 1920))
-        bg_logo_canvas = cv2.GaussianBlur(bg_logo_canvas, (151, 151), 0)
-        dark_matte = np.zeros_like(bg_logo_canvas)
-        bg_logo_canvas = cv2.addWeighted(bg_logo_canvas, 0.35, dark_matte, 0.65, 0) 
-
-        logo_h, logo_w = logo_img.shape[:2]
-        logo_scale = 500 / logo_w
-        new_logo_w = 500
-        new_logo_h = int(logo_h * logo_scale)
-        resized_logo = cv2.resize(logo_img, (new_logo_w, new_logo_h))
-
-        logo_x_start = (1080 - new_logo_w) // 2
-        logo_y_start = (1920 - new_logo_h) // 2
-
-        if resized_logo.shape[2] == 4:  
-            alpha_channel = resized_logo[:, :, 3] / 255.0
-            for c in range(3):
-                bg_logo_canvas[logo_y_start:logo_y_start+new_logo_h, logo_x_start:logo_x_start+new_logo_w, c] = (
-                    alpha_channel * resized_logo[:, :, c] +
-                    (1.0 - alpha_channel) * bg_logo_canvas[logo_y_start:logo_y_start+new_logo_h, logo_x_start:logo_x_start+new_logo_w, c]
-                )
-        else:  
-            bg_logo_canvas[logo_y_start:logo_y_start+new_logo_h, logo_x_start:logo_x_start+new_logo_w] = resized_logo
-
-        sub_text = "Follow & Subscribe for More Deals!"
-        sub_font = cv2.FONT_HERSHEY_SIMPLEX
-        sub_scale = 1.1
-        sub_thick = 3
-        (s_w, s_h), _ = cv2.getTextSize(sub_text, sub_font, sub_scale, sub_thick)
-        sub_x = (1080 - s_w) // 2
-        sub_y = logo_y_start + new_logo_h + 100
-        cv2.putText(bg_logo_canvas, sub_text, (sub_x, sub_y), sub_font, sub_scale, (255, 255, 255), sub_thick, cv2.LINE_AA)
-
-        lib_logo_path = os.path.join(os.getcwd(), "LinkInBio_Logo.png")
-        if os.path.exists(lib_logo_path):
-            lib_logo = cv2.imread(lib_logo_path, cv2.IMREAD_UNCHANGED)
-            if lib_logo is not None:
-                target_lib_w = 700
-                orig_lib_h, orig_lib_w = lib_logo.shape[:2]
-                target_lib_h = int(orig_lib_h * (target_lib_w / orig_lib_w))
-                resized_lib = cv2.resize(lib_logo, (target_lib_w, target_lib_h))
-                lib_x_start = (1080 - target_lib_w) // 2
-                lib_y_start = 150
-
-                if resized_lib.shape[2] == 4:
-                    alpha_channel = resized_lib[:, :, 3] / 255.0
-                    for c in range(3):
-                        bg_logo_canvas[lib_y_start:lib_y_start+target_lib_h, lib_x_start:lib_x_start+target_lib_w, c] = (
-                            alpha_channel * resized_lib[:, :, c] +
-                            (1.0 - alpha_channel) * bg_logo_canvas[lib_y_start:lib_y_start+target_lib_h, lib_x_start:lib_x_start+target_lib_w, c]
-                        )
-                else:
-                    bg_logo_canvas[lib_y_start:lib_y_start+target_lib_h, lib_x_start:lib_x_start+target_lib_w] = resized_lib
-
-        for _ in range(outro_frames):
-            frame_to_write = bg_logo_canvas.copy()
-            draw_video_duration_line(frame_to_write, global_frame_counter, total_frames)
-            out.write(frame_to_write)
-            global_frame_counter += 1
-
-    out.release()
-
-    # ==========================================
-    # PHASE D: PRO STEREO AUDIO DUCKING COMPOSITE
-    # ==========================================
+    frame_no = 0
+    video_clip = final_clip = music_clip = voice_clip = base_music = None
     try:
-        video_clip = VideoFileClip(temp_video_path)
-        audio_layers = []
+        # A) thumbnail hook (static)
+        if thumb_scene is not None:
+            hook = thumb_scene.render(0, thumb_frames)
+            draw_word_by_word_subtitle(hook, subtitle_lines[0], 0, thumb_frames)
+            for _ in range(thumb_frames):
+                f = hook.copy()
+                draw_progress_bar(f, frame_no, total_frames)
+                writer.write(f)
+                frame_no += 1
+
+        # B) product slideshow with zoom, cross-fades and rolling subtitles
+        start = 0
+        for img_idx, scene in enumerate(scenes):
+            frames_here = img_frames[img_idx]
+            trans = min(TRANSITION_FRAMES, frames_here)
+            for i in range(frames_here):
+                canvas = scene.render(i, frames_here)
+
+                if i >= frames_here - trans:  # cross-fade into the next scene / outro
+                    p = (i - (frames_here - trans)) / trans
+                    if img_idx < n - 1:
+                        nxt = scenes[img_idx + 1].render(i - (frames_here - trans), img_frames[img_idx + 1])
+                        canvas = cv2.addWeighted(canvas, 1.0 - p, nxt, p, 0)
+                    elif outro_canvas is not None:
+                        canvas = cv2.addWeighted(canvas, 1.0 - p, outro_canvas, p, 0)
+
+                g = start + i  # global index inside the product section
+                line_idx = min(g // frames_per_line, len(subtitle_lines) - 1)
+                draw_word_by_word_subtitle(canvas, subtitle_lines[line_idx], g % frames_per_line, frames_per_line)
+                draw_progress_bar(canvas, frame_no, total_frames)
+                writer.write(canvas)
+                frame_no += 1
+            start += frames_here
+
+        # C) brand outro
+        if outro_canvas is not None:
+            for _ in range(outro_frames):
+                f = outro_canvas.copy()
+                draw_progress_bar(f, frame_no, total_frames)
+                writer.write(f)
+                frame_no += 1
+    finally:
+        writer.release()
+
+    # D) final encode + audio mix
+    try:
+        video_clip = VideoFileClip(temp_video)
+        layers = []
 
         if has_voice:
-            voice_clip = AudioFileClip(temp_tts_path)
-            audio_layers.append(voice_clip)
+            voice_clip = AudioFileClip(tts_path)
+            layers.append(voice_clip)
 
-        bg_music_dir = os.path.join(os.getcwd(), "Background_Music")
-        if os.path.exists(bg_music_dir):
-            music_files = [os.path.join(bg_music_dir, f) for f in os.listdir(bg_music_dir) if f.lower().endswith('.mp3')]
-            if music_files:
-                selected_track = random.choice(music_files)
-                print(f"🎵 Layering background audio track: {os.path.basename(selected_track)}")
-                
-                # Create a safe compatibility wrapper for slicing clips
-                def safe_subclip(clip, start, end):
-                    if hasattr(clip, "subclipped"):
-                        return clip.subclipped(start, end)  # MoviePy v2.x (Cloud)
-                    return clip.subclip(start, end)          # MoviePy v1.x (Local)
-
-                # Fix: Properly instantiate the background audio clip before slicing it
-                base_music = AudioFileClip(selected_track)
-                bg_music_clip = safe_subclip(base_music, 0, video_clip.duration)
-                
-                # if has_voice:
-                #     voice_cutoff_time = total_duration - outro_duration
-                #     duck_filter = lambda gf, t: gf(t) * np.where(t < voice_cutoff_time, 0.06, 0.18)[:, np.newaxis]
-                    
-                #     if hasattr(bg_music_clip, "fl"):
-                #         bg_music_clip = bg_music_clip.fl(duck_filter)
-                #     else:
-                #         bg_music_clip = bg_music_clip.transform(duck_filter)
-                # else:
-                #     bg_music_clip = bg_music_clip.volumex(0.12) if hasattr(bg_music_clip, "volumex") else bg_music_clip.volumex(0.12)
-                    
-                audio_layers.append(bg_music_clip)
-
-        if audio_layers:
-            final_audio_mix = CompositeAudioClip(audio_layers)
-            # Adapt dynamically between MoviePy v1 (set_audio) and v2 (with_audio)
-            if hasattr(video_clip, "with_audio"):
-                final_output_clip = video_clip.with_audio(final_audio_mix)  # v2.x
-            else:
-                final_output_clip = video_clip.set_audio(final_audio_mix)   # v1.x
+        music_dir = os.path.join(SCRIPT_DIR, "Background_Music")
+        tracks = [os.path.join(music_dir, f) for f in os.listdir(music_dir) if f.lower().endswith(".mp3")] \
+            if os.path.isdir(music_dir) else []
+        if tracks:
+            track = random.choice(tracks)
+            print(f"🎵 Background track: {os.path.basename(track)}")
+            base_music = AudioFileClip(track)
+            music_clip = _subclip(base_music, 0, min(video_clip.duration, base_music.duration))
+            music_clip = _scale_volume(music_clip, 0.15 if has_voice else MUSIC_VOLUME)
+            layers.append(music_clip)
         else:
-            final_output_clip = video_clip
+            print("ℹ️ No Background_Music/*.mp3 found - video will be silent.")
 
-        final_output_clip.write_videofile(
-            output_path,
-            fps=30,
-            codec='libx264',
-            audio_codec='aac',
-            bitrate="5000k",
-            audio_bitrate="128k",
-            ffmpeg_params=["-movflags", "+faststart"],
-            logger=None,
-            write_logfile=False
+        final_clip = _with_audio(video_clip, CompositeAudioClip(layers)) if layers else video_clip
+        final_clip.write_videofile(
+            output_path, fps=FPS, codec="libx264", audio_codec="aac",
+            bitrate="5000k", audio_bitrate="128k",
+            ffmpeg_params=["-movflags", "+faststart", "-pix_fmt", "yuv420p"],
+            logger=None, write_logfile=False,
         )
-        
-        final_output_clip.close()
-        video_clip.close()
-        if has_voice: voice_clip.close()
-        if os.path.exists(bg_music_dir) and music_files and 'bg_music_clip' in locals() and bg_music_clip is not None: 
-            bg_music_clip.close()
-        
-        if os.path.exists(temp_video_path): os.remove(temp_video_path)
-        if os.path.exists(temp_tts_path): os.remove(temp_tts_path)
-            
-        print(f"🎉 SUCCESS: Video rendered with premium rolling word subtitles! Saved to: {output_path}")
+        print(f"🎉 Video ready: {output_path}")
         return True
-
     except Exception as e:
-        print(f"❌ Video compilation pipeline failure: {e}")
-        if os.path.exists(temp_video_path):
-            try: os.remove(temp_video_path)
-            except: pass
-        if os.path.exists(temp_tts_path):
-            try: os.remove(temp_tts_path)
-            except: pass
+        print(f"❌ Video compilation failed: {e}")
         return False
+    finally:
+        for clip in (final_clip, video_clip, voice_clip, music_clip, base_music):
+            try:
+                if clip is not None:
+                    clip.close()
+            except Exception:
+                pass
+        for leftover in (temp_video, tts_path):
+            try:
+                if os.path.exists(leftover):
+                    os.remove(leftover)
+            except OSError:
+                pass
